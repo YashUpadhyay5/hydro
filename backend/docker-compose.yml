@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: hrms_user
+      POSTGRES_PASSWORD: hrms_password
+      POSTGRES_DB: hrms_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      # Connect to the local Postgres container
+      - DATABASE_URL=postgresql://hrms_user:hrms_password@db:5432/hrms_db
+      - DB_SSL=false
+      # TODO: Add your Cloudinary and other JWT/env secrets below or in an .env file
+      # - JWT_SECRET=your_jwt_secret
+      # - CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+      # - CLOUDINARY_API_KEY=your_cloudinary_api_key
+      # - CLOUDINARY_API_SECRET=your_cloudinary_api_secret
+    depends_on:
+      - db
+    restart: unless-stopped
+    volumes:
+      - ./uploads:/app/uploads
+
+  # Optional: If you want to run Cloudflared in Docker as well
+  # Ensure you have a tunnel token from Cloudflare Zero Trust
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARED_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

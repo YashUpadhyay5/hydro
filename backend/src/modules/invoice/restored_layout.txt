@@ -1,0 +1,795 @@
+import { useState, useEffect } from "react";
+import API from "../services/api";
+
+const FIELD_TYPES = [
+  "Text", "Long Text", "Number", "Currency", "Percentage", "Date", "DateTime", "Time",
+  "Email", "Phone", "GSTIN", "PAN", "IFSC", "MICR", "SWIFT", "Dropdown", "Multi Select",
+  "Checkbox", "Radio", "Address", "URL", "QR Code", "Barcode", "Image", "Signature",
+  "JSON", "Object", "Dynamic Table", "File Upload"
+];
+
+const DEFAULT_SECTIONS_DEF = [
+  { id: "invoice_details", name: "Invoice Details", icon: "📄", description: "Basic invoice information" },
+  { id: "vendor_details", name: "Vendor Details", icon: "🏬", description: "Supplier information" },
+  { id: "consumer_details", name: "Consumer Details", icon: "👥", description: "Buyer / Customer information" },
+  { id: "bank_details", name: "Bank Details", icon: "🏦", description: "Payment account details" },
+  { id: "item_details", name: "Item Details", icon: "📊", description: "Products and line items" },
+  { id: "tax_summary", name: "Tax Details", icon: "💰", description: "GST, CGST, SGST, IGST" },
+  { id: "transport_details", name: "Transport Details", icon: "🚚", description: "Shipment information" },
+  { id: "metadata", name: "Metadata", icon: "🏷️", description: "Business specific information" },
+  { id: "notes", name: "Notes", icon: "📝", description: "Remarks and additional information" }
+];
+
+export default function TemplateWizard({ isOpen, files, onClose, onProcess, showToast }) {
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [activeTab, setActiveTab] = useState("wizard"); // wizard, manage
+  const [wizardStep, setWizardStep] = useState(1); // 1: Sections, 2: Fields Configuration
+  const [expandedSection, setExpandedSection] = useState(null);
+  const [editingField, setEditingField] = useState(null);
+  const [searchFieldQuery, setSearchFieldQuery] = useState("");
+
+  // New Custom Section Builder state
+  const [newSectionName, setNewSectionName] = useState("");
+  const [newSectionDesc, setNewSectionDesc] = useState("");
+
+  const loadTemplates = async () => {
+    try {
+      const res = await API.get("/templates");
+      setTemplates(res.data || []);
+      const def = res.data.find(t => t.is_default) || res.data[0];
+      if (def) {
+        setSelectedTemplate(JSON.parse(JSON.stringify(def)));
+      }
+    } catch (e) {
+      console.error("Failed to load templates:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      loadTemplates();
+      setWizardStep(1);
+      setExpandedSection(null);
+      setEditingField(null);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSelectTemplate = (tpl) => {
+    setSelectedTemplate(JSON.parse(JSON.stringify(tpl)));
+  };
+
+  const handleToggleSection = (sectionId) => {
+    if (!selectedTemplate) return;
+    const updated = { ...selectedTemplate };
+    updated.sections = updated.sections.map(s => {
+      if (s.id === sectionId) return { ...s, enabled: !s.enabled };
+      return s;
+    });
+    setSelectedTemplate(updated);
+  };
+
+  const handleFieldChange = (sectionId, fieldKey, key, value) => {
+    const updated = { ...selectedTemplate };
+    updated.sections = updated.sections.map(s => {
+      if (s.id === sectionId) {
+        return {
+          ...s,
+          fields: s.fields.map(f => {
+            if (f.key === fieldKey) return { ...f, [key]: value };
+            return f;
+          })
+        };
+      }
+      return s;
+    });
+    setSelectedTemplate(updated);
+    if (editingField && editingField.sectionId === sectionId && editingField.field.key === fieldKey) {
+      setEditingField({
+        ...editingField,
+        field: { ...editingField.field, [key]: value }
+      });
+    }
+  };
+
+  const handleAddField = (sectionId) => {
+    const updated = { ...selectedTemplate };
+    const fieldKey = "field_" + Date.now();
+    const newField = {
+      key: fieldKey,
+      label: "New Field",
+      type: "Text",
+      required: false,
+      editable: true,
+      read_only: false,
+      hidden: false,
+      searchable: true,
+      filterable: true,
+      sortable: true,
+      exportable: true,
+      api_visible: true,
+      dashboard_visible: true,
+      confidence_threshold: 70,
+      default_value: "",
+      validation_rule: "",
+      placeholder: "Enter value",
+      tooltip: "",
+      display_order: 10,
+      ai_prompt: "Extract the value."
+    };
+    updated.sections = updated.sections.map(s => {
+      if (s.id === sectionId) {
+        return { ...s, fields: [...s.fields, newField] };
+      }
+      return s;
+    });
+    setSelectedTemplate(updated);
+    setEditingField({ sectionId, field: newField });
+  };
+
+  const handleRemoveField = (sectionId, fieldKey) => {
+    const updated = { ...selectedTemplate };
+    updated.sections = updated.sections.map(s => {
+      if (s.id === sectionId) {
+        return { ...s, fields: s.fields.filter(f => f.key !== fieldKey) };
+      }
+      return s;
+    });
+    setSelectedTemplate(updated);
+    if (editingField && editingField.field.key === fieldKey) {
+      setEditingField(null);
+    }
+  };
+
+  const handleAddCustomSection = () => {
+    if (!newSectionName.trim()) return;
+    const updated = { ...selectedTemplate };
+    const secId = "custom_" + Date.now();
+    const newSec = {
+      id: secId,
+      name: newSectionName,
+      icon: "⚙️",
+      description: newSectionDesc || "Custom configured section",
+      enabled: True,
+      fields: []
+    };
+    updated.sections = [...updated.sections, newSec];
+    setSelectedTemplate(updated);
+    setNewSectionName("");
+    setNewSectionDesc("");
+    showToast("✓ Custom section added successfully.");
+  };
+
+  const handleSaveTemplate = async () => {
+    try {
+      const res = await API.post("/templates", selectedTemplate);
+      showToast("✓ Template layout saved successfully.");
+      await loadTemplates();
+      // Keep selected
+      const updated = res.data;
+      setSelectedTemplate(JSON.parse(JSON.stringify(updated)));
+    } catch {
+      showToast("Failed to save template layout.", "error");
+    }
+  };
+
+  const handleCloneTemplate = async (tplId) => {
+    try {
+      await API.post(`/templates/${tplId}/clone`);
+      showToast("✓ Template cloned successfully.");
+      loadTemplates();
+    } catch {
+      showToast("Failed to clone template.", "error");
+    }
+  };
+
+  const handleSetDefault = async (tplId) => {
+    try {
+      await API.post(`/templates/${tplId}/default`);
+      showToast("✓ Default template updated.");
+      loadTemplates();
+    } catch {
+      showToast("Failed to set default template.", "error");
+    }
+  };
+
+  const handleDeleteTemplate = async (tplId) => {
+    if (!window.confirm("Permanently delete this template configuration?")) return;
+    try {
+      await API.delete(`/templates/${tplId}`);
+      showToast("✓ Template configuration deleted.");
+      loadTemplates();
+    } catch (e) {
+      const msg = e.response?.data?.detail || "Delete failed.";
+      showToast(msg, "error");
+    }
+  };
+
+  const handleReorderField = (sectionId, index, direction) => {
+    const updated = { ...selectedTemplate };
+    updated.sections = updated.sections.map(s => {
+      if (s.id === sectionId) {
+        const fields = [...s.fields];
+        if (direction === "up" && index > 0) {
+          const temp = fields[index];
+          fields[index] = fields[index - 1];
+          fields[index - 1] = temp;
+        } else if (direction === "down" && index < fields.length - 1) {
+          const temp = fields[index];
+          fields[index] = fields[index + 1];
+          fields[index + 1] = temp;
+        }
+        return { ...s, fields };
+      }
+      return s;
+    });
+    setSelectedTemplate(updated);
+  };
+
+  return (
+    <div className="template-wizard-overlay" style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.65)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 2000,
+      backdropFilter: "blur(4px)"
+    }}>
+      <div className="template-wizard-card" style={{
+        background: "var(--bg)",
+        width: "90%",
+        maxWidth: "1150px",
+        height: "85%",
+        borderRadius: "12px",
+        boxShadow: "var(--shadow)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        border: "1px solid var(--border)",
+        fontFamily: "var(--sans)"
+      }}>
+        {/* Header */}
+        <div className="wizard-header" style={{
+          padding: "16px 24px",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: "var(--bg)"
+        }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "20px", color: "var(--text-h)" }}>Configure OCR Extraction</h2>
+            <p style={{ margin: "2px 0 0", fontSize: "13px", color: "var(--text)" }}>
+              Select layout template and extraction fields. Only checked items will be parsed and stored.
+            </p>
+          </div>
+          <button className="btn btn-secondary" onClick={onClose} style={{ padding: "6px 12px", borderRadius: "6px" }}>×</button>
+        </div>
+
+        {/* Tab Selector */}
+        <div style={{ display: "flex", padding: "0 24px", borderBottom: "1px solid var(--border)", gap: "20px" }}>
+          <button
+            onClick={() => { setActiveTab("wizard"); setWizardStep(1); }}
+            style={{
+              padding: "12px 6px",
+              border: "none",
+              background: "transparent",
+              color: activeTab === "wizard" ? "var(--accent)" : "var(--text)",
+              borderBottom: activeTab === "wizard" ? "2px solid var(--accent)" : "2px solid transparent",
+              fontWeight: "600",
+              cursor: "pointer"
+            }}
+          >
+            Extraction Wizard
+          </button>
+          <button
+            onClick={() => setActiveTab("manage")}
+            style={{
+              padding: "12px 6px",
+              border: "none",
+              background: "transparent",
+              color: activeTab === "manage" ? "var(--accent)" : "var(--text)",
+              borderBottom: activeTab === "manage" ? "2px solid var(--accent)" : "2px solid transparent",
+              fontWeight: "600",
+              cursor: "pointer"
+            }}
+          >
+            Template Manager
+          </button>
+        </div>
+
+        {/* Content Area */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+          {activeTab === "wizard" ? (
+            <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+              {/* Wizard Left Section */}
+              <div style={{ flex: 1, padding: "24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "20px", borderRight: "1px solid var(--border)" }}>
+                {/* Step 1: Sections Selection */}
+                {wizardStep === 1 && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <label style={{ fontSize: "14px", fontWeight: "600" }}>Select Active Template:</label>
+                      <select
+                        style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}
+                        value={selectedTemplate?.id || ""}
+                        onChange={(e) => {
+                          const t = templates.find(tpl => tpl.id === e.target.value);
+                          if (t) handleSelectTemplate(t);
+                        }}
+                      >
+                        {templates.map(t => (
+                          <option key={t.id} value={t.id}>{t.name} {t.is_default ? "(Default)" : ""}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                      gap: "16px"
+                    }}>
+                      {selectedTemplate?.sections.map(sec => {
+                        const isEnabled = sec.enabled;
+                        return (
+                          <div
+                            key={sec.id}
+                            onClick={() => handleToggleSection(sec.id)}
+                            style={{
+                              border: isEnabled ? "1px solid var(--accent)" : "1px solid var(--border)",
+                              background: isEnabled ? "var(--accent-bg)" : "var(--bg)",
+                              borderRadius: "8px",
+                              padding: "16px",
+                              cursor: "pointer",
+                              transition: "all 0.2s ease",
+                              display: "flex",
+                              gap: "12px",
+                              alignItems: "flex-start",
+                              boxShadow: isEnabled ? "0 2px 8px rgba(170,59,255,0.08)" : "none"
+                            }}
+                          >
+                            <span style={{ fontSize: "24px" }}>{sec.icon || "⚙️"}</span>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                              <span style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-h)" }}>{sec.name}</span>
+                              <span style={{ fontSize: "11px", color: "var(--text)", lineHeight: "1.3" }}>{sec.description}</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isEnabled}
+                              onChange={() => {}}
+                              style={{ marginLeft: "auto", pointerEvents: "none" }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Section Builder */}
+                    <div style={{ marginTop: "24px", border: "1px dashed var(--border)", borderRadius: "8px", padding: "16px" }}>
+                      <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "700" }}>🔨 Custom Section Builder</h4>
+                      <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
+                        <input
+                          type="text"
+                          placeholder="Section Name (e.g. Warranty Details)"
+                          value={newSectionName}
+                          onChange={(e) => setNewSectionName(e.target.value)}
+                          style={{ flex: 1, padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)", fontSize: "13px" }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Description"
+                          value={newSectionDesc}
+                          onChange={(e) => setNewSectionDesc(e.target.value)}
+                          style={{ flex: 1, padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)", fontSize: "13px" }}
+                        />
+                      </div>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleAddCustomSection}
+                        style={{ fontSize: "12px", padding: "6px 12px" }}
+                      >
+                        + Add Custom Section
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* Step 2: Detailed Fields Config */}
+                {wizardStep === 2 && selectedTemplate && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>Configure Fields</h3>
+                      <input
+                        type="text"
+                        placeholder="🔍 Search fields..."
+                        value={searchFieldQuery}
+                        onChange={(e) => setSearchFieldQuery(e.target.value)}
+                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)", fontSize: "12px", width: "200px" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {selectedTemplate.sections
+                        .filter(s => s.enabled)
+                        .map(sec => {
+                          const isExpanded = expandedSection === sec.id;
+                          const filteredFields = sec.fields.filter(f => 
+                            f.label.toLowerCase().includes(searchFieldQuery.toLowerCase()) ||
+                            f.key.toLowerCase().includes(searchFieldQuery.toLowerCase())
+                          );
+
+                          return (
+                            <div key={sec.id} style={{ border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden" }}>
+                              {/* Section Header */}
+                              <div
+                                onClick={() => setExpandedSection(isExpanded ? null : sec.id)}
+                                style={{
+                                  padding: "12px 16px",
+                                  background: "var(--accent-bg)",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  cursor: "pointer"
+                                }}
+                              >
+                                <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-h)" }}>
+                                  {sec.icon} {sec.name} ({sec.fields.length} fields)
+                                </span>
+                                <span>{isExpanded ? "▲" : "▼"}</span>
+                              </div>
+
+                              {/* Section Fields list */}
+                              {isExpanded && (
+                                <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px", background: "var(--bg)" }}>
+                                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                                    <thead>
+                                      <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                                        <th style={{ padding: "6px", textAlign: "left" }}>Display Label</th>
+                                        <th style={{ padding: "6px", textAlign: "left" }}>Type</th>
+                                        <th style={{ padding: "6px", textAlign: "center" }}>Required</th>
+                                        <th style={{ padding: "6px", textAlign: "center" }}>Hidden</th>
+                                        <th style={{ padding: "6px", textAlign: "right" }}>Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {filteredFields.map((f, index) => (
+                                        <tr key={f.key} style={{ borderBottom: "1px solid var(--border)" }}>
+                                          <td style={{ padding: "6px" }}>
+                                            <input
+                                              type="text"
+                                              value={f.label}
+                                              onChange={(e) => handleFieldChange(sec.id, f.key, "label", e.target.value)}
+                                              style={{ padding: "4px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "12px", width: "90%", background: "var(--bg)", color: "var(--text)" }}
+                                            />
+                                          </td>
+                                          <td style={{ padding: "6px" }}>
+                                            <select
+                                              value={f.type}
+                                              onChange={(e) => handleFieldChange(sec.id, f.key, "type", e.target.value)}
+                                              style={{ padding: "4px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "11px", background: "var(--bg)", color: "var(--text)" }}
+                                            >
+                                              {FIELD_TYPES.map(t => (
+                                                <option key={t} value={t}>{t}</option>
+                                              ))}
+                                            </select>
+                                          </td>
+                                          <td style={{ padding: "6px", textAlign: "center" }}>
+                                            <input
+                                              type="checkbox"
+                                              checked={f.required}
+                                              onChange={(e) => handleFieldChange(sec.id, f.key, "required", e.target.checked)}
+                                            />
+                                          </td>
+                                          <td style={{ padding: "6px", textAlign: "center" }}>
+                                            <input
+                                              type="checkbox"
+                                              checked={f.hidden}
+                                              onChange={(e) => handleFieldChange(sec.id, f.key, "hidden", e.target.checked)}
+                                            />
+                                          </td>
+                                          <td style={{ padding: "6px", textAlign: "right" }}>
+                                            <div style={{ display: "inline-flex", gap: "4px" }}>
+                                              <button onClick={() => handleReorderField(sec.id, index, "up")} style={{ padding: "2px 4px", fontSize: "10px", cursor: "pointer" }}>▲</button>
+                                              <button onClick={() => handleReorderField(sec.id, index, "down")} style={{ padding: "2px 4px", fontSize: "10px", cursor: "pointer" }}>▼</button>
+                                              <button
+                                                onClick={() => setEditingField({ sectionId: sec.id, field: f })}
+                                                style={{ padding: "2px 6px", fontSize: "10px", color: "var(--accent)", border: "1px solid var(--accent)", borderRadius: "4px", background: "transparent", cursor: "pointer" }}
+                                              >
+                                                Configure
+                                              </button>
+                                              <button
+                                                onClick={() => handleRemoveField(sec.id, f.key)}
+                                                style={{ padding: "2px 6px", fontSize: "10px", color: "#b91c1c", border: "1px solid #fecaca", borderRadius: "4px", background: "transparent", cursor: "pointer" }}
+                                              >
+                                                Delete
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                  <button
+                                    onClick={() => handleAddField(sec.id)}
+                                    style={{
+                                      padding: "6px 12px",
+                                      border: "1px dashed var(--accent)",
+                                      background: "transparent",
+                                      color: "var(--accent)",
+                                      borderRadius: "6px",
+                                      fontSize: "11px",
+                                      cursor: "pointer",
+                                      fontWeight: "600",
+                                      alignSelf: "flex-start"
+                                    }}
+                                  >
+                                    + Add New Field
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Wizard Right Preview / Config Details Section */}
+              <div style={{ width: "38%", padding: "24px", background: "var(--code-bg)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "20px" }}>
+                {editingField ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "700" }}>⚙️ Field Properties</h4>
+                      <button className="btn btn-secondary" onClick={() => setEditingField(null)} style={{ fontSize: "10px", padding: "2px 6px" }}>Close</button>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px", fontSize: "12px" }}>
+                      <div>
+                        <label style={{ fontWeight: "600", display: "block", marginBottom: "4px" }}>Display Label:</label>
+                        <input
+                          type="text"
+                          value={editingField.field.label}
+                          onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "label", e.target.value)}
+                          style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "4px", background: "var(--bg)", color: "var(--text)" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontWeight: "600", display: "block", marginBottom: "4px" }}>Internal Key (JSON key):</label>
+                        <input
+                          type="text"
+                          value={editingField.field.key}
+                          onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "key", e.target.value)}
+                          style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "4px", background: "var(--bg)", color: "var(--text)" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontWeight: "600", display: "block", marginBottom: "4px" }}>AI Prompt / Extraction Instruction:</label>
+                        <textarea
+                          rows="3"
+                          value={editingField.field.ai_prompt}
+                          onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "ai_prompt", e.target.value)}
+                          style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "4px", background: "var(--bg)", color: "var(--text)", fontFamily: "sans-serif" }}
+                        />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                        <div>
+                          <label style={{ fontWeight: "600", display: "block", marginBottom: "4px" }}>Field Type:</label>
+                          <select
+                            value={editingField.field.type}
+                            onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "type", e.target.value)}
+                            style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "4px", background: "var(--bg)", color: "var(--text)" }}
+                          >
+                            {FIELD_TYPES.map(t => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontWeight: "600", display: "block", marginBottom: "4px" }}>Confidence Threshold (%):</label>
+                          <input
+                            type="number"
+                            value={editingField.field.confidence_threshold}
+                            onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "confidence_threshold", parseInt(e.target.value) || 70)}
+                            style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "4px", background: "var(--bg)", color: "var(--text)" }}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ fontWeight: "600", display: "block", marginBottom: "4px" }}>Validation Regex Rule:</label>
+                        <input
+                          type="text"
+                          value={editingField.field.validation_rule || ""}
+                          placeholder="e.g. ^[0-9]{2}[A-Z]{5}..."
+                          onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "validation_rule", e.target.value)}
+                          style={{ width: "100%", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "4px", background: "var(--bg)", color: "var(--text)" }}
+                        />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "4px" }}>
+                        <label><input type="checkbox" checked={editingField.field.required} onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "required", e.target.checked)} /> Required</label>
+                        <label><input type="checkbox" checked={editingField.field.editable} onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "editable", e.target.checked)} /> Editable</label>
+                        <label><input type="checkbox" checked={editingField.field.hidden} onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "hidden", e.target.checked)} /> Hidden</label>
+                        <label><input type="checkbox" checked={editingField.field.searchable} onChange={(e) => handleFieldChange(editingField.sectionId, editingField.field.key, "searchable", e.target.checked)} /> Searchable</label>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <h4 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: "700" }}>🖥️ Dynamic Form Preview</h4>
+                    <p style={{ fontSize: "11px", color: "var(--text)", marginBottom: "16px" }}>This displays a live representation of the dynamic validation screen.</p>
+                    
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "12px", border: "1px solid var(--border)", borderRadius: "8px", background: "var(--bg)" }}>
+                      {selectedTemplate?.sections
+                        .filter(s => s.enabled)
+                        .map(sec => (
+                          <div key={sec.id} style={{ border: "1px solid var(--border)", borderRadius: "6px", overflow: "hidden", fontSize: "11px" }}>
+                            <div style={{ background: "var(--accent-bg)", padding: "6px 10px", fontWeight: "600", color: "var(--text-h)" }}>
+                              {sec.icon} {sec.name}
+                            </div>
+                            <div style={{ padding: "10px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                              {sec.fields.filter(f => !f.hidden).map(f => (
+                                <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                  <span style={{ fontWeight: "600", color: "var(--text-h)" }}>{f.label}{f.required && <span style={{ color: "#b91c1c" }}> *</span>}</span>
+                                  <input
+                                    type="text"
+                                    placeholder={f.placeholder || f.label}
+                                    disabled={f.read_only}
+                                    style={{ padding: "4px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "10px", background: "var(--bg)", color: "var(--text)" }}
+                                  />
+                                </div>
+                              ))}
+                              {sec.fields.filter(f => !f.hidden).length === 0 && (
+                                <span style={{ color: "var(--text)", gridColumn: "span 2", fontStyle: "italic" }}>No visible fields configured.</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Template Management tab */
+            <div style={{ flex: 1, padding: "24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>Manage Extraction Templates</h3>
+                <button
+                  className="btn btn-primary"
+                  onClick={async () => {
+                    const name = window.prompt("Enter new template name:");
+                    if (!name) return;
+                    try {
+                      await API.post("/templates", {
+                        name,
+                        description: "Custom template configured from dashboard.",
+                        sections: get_default_template_sections()
+                      });
+                      showToast("✓ Template created.");
+                      loadTemplates();
+                    } catch {
+                      showToast("Failed to create template.", "error");
+                    }
+                  }}
+                  style={{ padding: "6px 12px", fontSize: "13px" }}
+                >
+                  + Create New Template
+                </button>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", textAlign: "left" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "2px solid var(--border)" }}>
+                      <th style={{ padding: "10px" }}>Template Name</th>
+                      <th style={{ padding: "10px" }}>Description</th>
+                      <th style={{ padding: "10px" }}>Default</th>
+                      <th style={{ padding: "10px", textAlign: "right" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {templates.map(tpl => (
+                      <tr key={tpl.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "12px 10px", fontWeight: "600", color: "var(--text-h)" }}>{tpl.name}</td>
+                        <td style={{ padding: "12px 10px", color: "var(--text)" }}>{tpl.description}</td>
+                        <td style={{ padding: "12px 10px" }}>
+                          {tpl.is_default ? (
+                            <span style={{ background: "var(--accent-bg)", color: "var(--accent)", padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>Default</span>
+                          ) : (
+                            <button
+                              onClick={() => handleSetDefault(tpl.id)}
+                              style={{ padding: "2px 6px", fontSize: "11px", border: "1px solid var(--border)", borderRadius: "4px", background: "transparent", cursor: "pointer", color: "var(--text)" }}
+                            >
+                              Set Default
+                            </button>
+                          )}
+                        </td>
+                        <td style={{ padding: "12px 10px", textAlign: "right" }}>
+                          <div style={{ display: "inline-flex", gap: "8px" }}>
+                            <button
+                              onClick={() => { handleSelectTemplate(tpl); setActiveTab("wizard"); setWizardStep(1); }}
+                              style={{ padding: "4px 8px", fontSize: "11px", border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent", borderRadius: "4px", cursor: "pointer" }}
+                            >
+                              Edit Layout
+                            </button>
+                            <button
+                              onClick={() => handleCloneTemplate(tpl.id)}
+                              style={{ padding: "4px 8px", fontSize: "11px", border: "1px solid var(--border)", color: "var(--text)", background: "transparent", borderRadius: "4px", cursor: "pointer" }}
+                            >
+                              Clone
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTemplate(tpl.id)}
+                              disabled={tpl.is_default}
+                              style={{ padding: "4px 8px", fontSize: "11px", border: "1px solid #fecaca", color: "#b91c1c", background: "transparent", borderRadius: "4px", cursor: "pointer", opacity: tpl.is_default ? 0.5 : 1 }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer / Action Bar */}
+        <div className="wizard-footer" style={{
+          padding: "16px 24px",
+          borderTop: "1px solid var(--border)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: "var(--bg)"
+        }}>
+          {activeTab === "wizard" ? (
+            <>
+              {wizardStep === 1 ? (
+                <>
+                  <span style={{ fontSize: "12px", color: "var(--text)" }}>Step 1: Select sections to extract</span>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                    <button className="btn btn-primary" onClick={() => setWizardStep(2)}>Configure Fields →</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button className="btn btn-secondary" onClick={() => setWizardStep(1)}>← Back</button>
+                    <button className="btn btn-secondary" onClick={handleSaveTemplate}>Save Template Layout</button>
+                  </div>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => {
+                        // Pass selected template id to proceed with OCR
+                        onProcess(selectedTemplate.id);
+                      }}
+                    >
+                      🚀 Start OCR Processing
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <span>Template Settings Management</span>
+              <button className="btn btn-secondary" onClick={onClose}>Close</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
