@@ -49,10 +49,10 @@ initSocketGateway(server);
 const startServer = async () => {
   try {
     await sequelize.sync();
-    await sequelize.query('PRAGMA journal_mode=WAL;');
-    await sequelize.query('PRAGMA busy_timeout=5000;');
+    await sequelize.query('PRAGMA journal_mode=WAL;').catch(() => {});
+    await sequelize.query('PRAGMA busy_timeout=5000;').catch(() => {});
     await sequelize.query('CREATE INDEX IF NOT EXISTS idx_footprints_user_ts ON location_footprints(userId, timestamp DESC);').catch(() => {});
-    console.log('Database architecture connected with WAL concurrency & footprint index enabled.');
+    console.log('Database architecture connected with schema sync enabled.');
     
     await runMigrations(sequelize);
     await runSeeders(sequelize);

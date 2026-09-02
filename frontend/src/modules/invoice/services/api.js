@@ -1,7 +1,14 @@
 import axios from "axios";
 
+const getInvoiceApiBaseUrl = () => {
+  if (import.meta.env && import.meta.env.VITE_API_URL) {
+    return `${import.meta.env.VITE_API_URL}/v1/invoice`;
+  }
+  return `http://${window.location.hostname}:8000/api/v1/invoice`;
+};
+
 const API = axios.create({
-  baseURL: `http://${window.location.hostname}:8000/api/v1/invoice`,
+  baseURL: getInvoiceApiBaseUrl(),
 });
 
 // Automatically inject token in request headers

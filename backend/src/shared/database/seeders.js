@@ -22,8 +22,8 @@ const runSeeders = async (sequelize) => {
         {
           id: 'HMPL02',
           empCode: 'HMPL02',
-          name: 'Kajal Material',
-          email: 'kajalhydromaterial@gmail.com',
+          name: 'Yash Material',
+          email: 'yashhydromaterial@gmail.com',
           password: 'password123',
           role: 'EMPLOYEE',
           designation: 'FIELD',
