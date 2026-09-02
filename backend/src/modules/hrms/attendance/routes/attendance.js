@@ -158,6 +158,20 @@ router.post('/', async (req, res) => {
     const latVal = parsedCoords ? (parsedCoords.lat != null ? parsedCoords.lat : parsedCoords.latitude) : null;
     const lonVal = parsedCoords ? (parsedCoords.lon != null ? parsedCoords.lon : (parsedCoords.lng != null ? parsedCoords.lng : parsedCoords.longitude)) : null;
 
+    const todayDate = date || new Date().toISOString().split('T')[0];
+
+    // Safeguard 0: Auto-close any dangling unclosed sessions from previous dates for this employee
+    await Attendance.update(
+      { checkOut: '19:00:00', workingHours: '08:00' },
+      {
+        where: {
+          userId: { [Op.in]: possibleUserIds },
+          date: { [Op.ne]: todayDate },
+          checkOut: null
+        }
+      }
+    ).catch(err => console.warn('[Auto-Close Past Sessions Warning]:', err.message));
+
     // Check if this is a clock-out update (since checkOut is provided)
     if (checkOut) {
       const activeRecord = await Attendance.findOne({
@@ -191,7 +205,6 @@ router.post('/', async (req, res) => {
     }
 
     // Verify clock-in daily limit
-    const todayDate = date || new Date().toISOString().split('T')[0];
 
     const dailyCount = await Attendance.count({
       where: {

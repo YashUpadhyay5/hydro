@@ -9,6 +9,9 @@ class CronScheduler {
   static start() {
     console.log('[CronScheduler] Initializing zero-dependency cron scheduler...');
     
+    // Auto-close stale past sessions on boot
+    this.autoCloseStaleSessions().catch(err => console.error('[CronScheduler Init Auto-Close Error]:', err.message));
+
     let last9AMFiredDate = null;
     let last6PMFiredDate = null;
 
@@ -18,6 +21,9 @@ class CronScheduler {
         const todayStr = now.toISOString().split('T')[0];
         const HH = now.getHours();
         const MM = now.getMinutes();
+
+        // 0. Periodic check to auto-close any unclosed past sessions from previous dates
+        await this.autoCloseStaleSessions();
 
         // 1. 9:00 AM Clock-In Reminder (Trigger within the first 5 minutes of the 9:00 AM hour)
         if (HH === 9 && MM >= 0 && MM < 5 && last9AMFiredDate !== todayStr) {
@@ -133,6 +139,30 @@ class CronScheduler {
       }
     } catch (err) {
       console.error('[CronScheduler] Failed running 6:00 PM job:', err.message);
+    }
+  }
+
+  static async autoCloseStaleSessions() {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const staleSessions = await Attendance.findAll({
+        where: {
+          checkOut: null,
+          date: { [Op.ne]: todayStr }
+        }
+      });
+
+      if (staleSessions.length > 0) {
+        console.log(`[CronScheduler] Found ${staleSessions.length} stale unclosed sessions from previous dates. Auto-closing...`);
+        for (const session of staleSessions) {
+          session.checkOut = '19:00:00';
+          session.workingHours = '08:00';
+          await session.save();
+        }
+        console.log(`[CronScheduler] Successfully auto-closed ${staleSessions.length} stale past sessions.`);
+      }
+    } catch (err) {
+      console.error('[CronScheduler] Error in autoCloseStaleSessions:', err.message);
     }
   }
 
