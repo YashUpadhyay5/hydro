@@ -70,6 +70,9 @@ const invoiceProxy = createProxyMiddleware({
 
 app.use((req, res, next) => {
     if (invoiceFilter(req.path, req)) {
+        if (process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
+            return handleInvoiceExpressFallback(req, res);
+        }
         return invoiceProxy(req, res, (err) => {
             if (err) return handleInvoiceExpressFallback(req, res);
             next();
