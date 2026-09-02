@@ -5,6 +5,11 @@ module.exports = {
       script: 'src/server.js',
       cwd: 'C:/Users/Falcon/Desktop/hydro-copy/Hydro/backend',
       node_args: '--max-old-space-size=4096',
+      restart_delay: 2500,
+      kill_timeout: 4000,
+      min_uptime: '10s',
+      max_restarts: 10,
+      listen_timeout: 10000,
       env: {
         NODE_ENV: 'production',
         PORT: 8000

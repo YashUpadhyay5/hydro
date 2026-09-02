@@ -15,6 +15,34 @@ const path = require('path');
 const PORT = process.env.PORT || 8000;
 const server = http.createServer(app);
 
+// Production Socket Lifecycle & Keep-Alive Settings (Ensures mobile sockets close cleanly)
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+server.requestTimeout = 30000;
+
+let bindAttempts = 0;
+const MAX_BIND_ATTEMPTS = 5;
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    bindAttempts++;
+    if (bindAttempts <= MAX_BIND_ATTEMPTS) {
+      console.warn(`[Port Busy]: Port ${PORT} is currently held by flushing sockets. Retrying bind in 2.5s (Attempt ${bindAttempts}/${MAX_BIND_ATTEMPTS})...`);
+      setTimeout(() => {
+        try {
+          server.close();
+        } catch(e) {}
+        server.listen(PORT);
+      }, 2500);
+    } else {
+      console.error(`[Fatal Server Error]: Port ${PORT} remained busy after ${MAX_BIND_ATTEMPTS} retry attempts.`);
+      process.exit(1);
+    }
+  } else {
+    console.error('[Server Socket Error]:', err);
+  }
+});
+
 // Initialize Socket.IO Gateway
 initSocketGateway(server);
 
@@ -31,6 +59,7 @@ const startServer = async () => {
     await loadSites();
     
     server.listen(PORT, () => {
+      bindAttempts = 0;
       console.log(`Server executing active connection interface protocols across port: ${PORT}`);
 
       // CHANGE 7 & CHANGE 1: SERVER STARTUP REPORT & ROUTE AUDIT LOGS
