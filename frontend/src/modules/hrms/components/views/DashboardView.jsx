@@ -425,6 +425,13 @@ export default function DashboardView({ totalEmployees, onViewChange }) {
         fetchDashboardData();
         fetchAnnouncements();
         loadHolidays();
+
+        // Real-time background auto-refresh every 15 seconds
+        const intervalId = setInterval(() => {
+            fetchDashboardData();
+        }, 15000);
+
+        return () => clearInterval(intervalId);
     }, []);
 
     const handleCreateAnnouncement = async (e) => {
