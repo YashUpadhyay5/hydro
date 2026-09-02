@@ -23,7 +23,7 @@ def safe_float(val, default=0.0):
 class ExcelService:
 
     @staticmethod
-    def generate_inventory_excel(db: Session):
+    def generate_inventory_excel(db: Session, start_date: str = None, end_date: str = None):
         # 1. Fetch active template
         tpl = db.query(Template).filter(Template.is_default == True).first()
         if not tpl:
@@ -53,10 +53,16 @@ class ExcelService:
                     if not field.get("hidden", False):
                         columns_mapping.append((sec_id, field["key"], f"{sec['name']} - {field['label']}", field.get("type", "Text")))
 
-        # 3. Query all processed queue documents containing ocr extraction data
-        docs = db.query(QueueDocument).filter(
+        # 3. Query processed queue documents containing ocr extraction data with optional uploaded date duration filter
+        query = db.query(QueueDocument).filter(
             QueueDocument.ocr_result.isnot(None)
-        ).all()
+        )
+        if start_date:
+            query = query.filter(QueueDocument.created_at >= f"{start_date.strip()} 00:00:00")
+        if end_date:
+            query = query.filter(QueueDocument.created_at <= f"{end_date.strip()} 23:59:59")
+
+        docs = query.order_by(QueueDocument.created_at.desc()).all()
 
         rows = []
         total_qty = 0.0

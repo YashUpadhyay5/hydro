@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import API from "../services/api";
+import ExcelDateRangeModal from "../components/ExcelDateRangeModal";
 
 const getDocDetails = (doc) => {
   if (!doc) return { vendorName: "Unknown Vendor", invoiceNo: "N/A", invoiceDate: "N/A", grandTotal: 0 };
@@ -59,6 +60,7 @@ export default function ArchivePage() {
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState(null);
   const [dynamicFilters, setDynamicFilters] = useState({});
+  const [showExcelModal, setShowExcelModal] = useState(false);
 
   const loadTemplates = async () => {
     try {
@@ -298,9 +300,7 @@ export default function ArchivePage() {
               cursor: "pointer"
             }}
             onClick={() => {
-              const token = localStorage.getItem("token") || "";
-              window.open(`http://${window.location.hostname}:8000/api/export/excel?token=${token}`, "_blank");
-              showToast && showToast("✓ Excel download initiated!");
+              setShowExcelModal(true);
             }}
           >
             <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -627,6 +627,13 @@ function ArchiveDetailView({ doc, onClose }) {
           </div>
         )}
       </div>
+
+      {/* Date Range Modal for Excel Export */}
+      <ExcelDateRangeModal
+        isOpen={showExcelModal}
+        onClose={() => setShowExcelModal(false)}
+        showToast={showToast}
+      />
     </div>
   );
 }

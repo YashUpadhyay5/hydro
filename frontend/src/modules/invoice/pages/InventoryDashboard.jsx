@@ -4,6 +4,7 @@ import KPICards from "../components/KPICards";
 import DocumentPreview from "../components/DocumentPreview";
 import ExtractionEditor from "../components/ExtractionEditor";
 import ActionButtons from "../components/ActionButtons";
+import ExcelDateRangeModal from "../components/ExcelDateRangeModal";
 
 const formatToInputDate = (dateStr) => {
   if (!dateStr) return "";
@@ -141,6 +142,7 @@ function InventoryDashboard() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [notification, setNotification] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [showExcelModal, setShowExcelModal] = useState(false);
 
   const [verificationTime, setVerificationTime] = useState(0);
   const [timerActive, setTimerActive] = useState(false);
@@ -431,8 +433,7 @@ function InventoryDashboard() {
 
   // Download Excel inventory report
   const handleDownloadExcel = () => {
-    window.open(`http://${window.location.hostname}:8000/api/export/excel`, "_blank");
-    showToast("Excel spreadsheet download initiated!");
+    setShowExcelModal(true);
   };
 
   // Print Summary Page
@@ -892,14 +893,19 @@ function InventoryDashboard() {
               </table>
             </div>
 
-          </div>
-
           <div style={{ textAlign: "center", fontSize: "7pt", color: "#94a3b8", marginTop: "25px", borderTop: "1px dashed #cbd5e1", paddingTop: "6px" }}>
             This summary document was generated automatically by the Inventory OCR Portal from authenticated database records.
           </div>
 
         </div>
       )}
+
+      {/* Date Range Modal for Excel Export */}
+      <ExcelDateRangeModal
+        isOpen={showExcelModal}
+        onClose={() => setShowExcelModal(false)}
+        showToast={showToast}
+      />
     </div>
   );
 }

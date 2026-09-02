@@ -5,6 +5,7 @@ import KPICards from "../components/KPICards";
 import DocumentPreview from "../components/DocumentPreview";
 import ExtractionEditor from "../components/ExtractionEditor";
 import ActionButtons from "../components/ActionButtons";
+import ExcelDateRangeModal from "../components/ExcelDateRangeModal";
 
 const formatToInputDate = (dateStr) => {
   if (!dateStr) return "";
@@ -88,6 +89,7 @@ export default function ValidationPage() {
   const { documents, loadDocuments, showToast } = useOutletContext();
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [mockDocument, setMockDocument] = useState(null);
+  const [showExcelModal, setShowExcelModal] = useState(false);
   const [editableExtraction, setEditableExtraction] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -454,9 +456,7 @@ export default function ValidationPage() {
   };
 
   const handleDownloadExcel = () => {
-    const token = localStorage.getItem("token") || "";
-    window.open(`http://${window.location.hostname}:8000/api/export/excel?token=${token}`, "_blank");
-    showToast("Excel download initiated!");
+    setShowExcelModal(true);
   };
 
   const handlePrint = () => {
@@ -871,23 +871,12 @@ export default function ValidationPage() {
         </div>
       )}
 
-      {/* Print Layout */}
-      {isProcessed && selectedDocument && (
-        <div className="print-header" style={{ fontFamily: "Inter, sans-serif", color: "#000", padding: "10px", fontSize: "9pt", lineHeight: "1.3" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #000", paddingBottom: "8px", marginBottom: "15px" }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: "16pt", fontWeight: "800" }}>INVENTORY AUDIT SHEET</h1>
-              <span style={{ fontSize: "8pt", color: "#555" }}>Database Verified Record</span>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontWeight: "700", fontSize: "10pt" }}>
-                Status: <span style={{ color: selectedDocument.saved ? "#047857" : "#b91c1c" }}>{selectedDocument.saved ? "VERIFIED & SAVED" : "DRAFT"}</span>
-              </div>
-              <div style={{ fontSize: "8pt", color: "#555" }}>Group ID: {selectedDocument.document_id}<br/>Date: {new Date().toLocaleDateString()}</div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Date Range Modal for Excel Export */}
+      <ExcelDateRangeModal
+        isOpen={showExcelModal}
+        onClose={() => setShowExcelModal(false)}
+        showToast={showToast}
+      />
     </div>
   );
 }

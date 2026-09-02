@@ -24,23 +24,41 @@ from services.queue_service import (
     QueueService
 )
 
+from typing import Optional
+
 router = APIRouter()
 
 
 @router.get("/export/excel")
 def export_excel(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    startDate: Optional[str] = None,
+    endDate: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
+    effective_start = start_date or startDate
+    effective_end = end_date or endDate
 
     file_path = (
         ExcelService.generate_inventory_excel(
-            db
+            db,
+            start_date=effective_start,
+            end_date=effective_end
         )
     )
 
+    filename = "inventory_export.xlsx"
+    if effective_start and effective_end:
+        filename = f"invoices_{effective_start}_to_{effective_end}.xlsx"
+    elif effective_start:
+        filename = f"invoices_from_{effective_start}.xlsx"
+    elif effective_end:
+        filename = f"invoices_up_to_{effective_end}.xlsx"
+
     return FileResponse(
         path=file_path,
-        filename="inventory_export.xlsx",
+        filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
