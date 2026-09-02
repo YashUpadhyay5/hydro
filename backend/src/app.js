@@ -43,16 +43,21 @@ app.use(corsManager);
 // Proxy invoice extractor endpoints directly to python FastAPI service on port 8080
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const invoiceFilter = (pathname, req) => {
+  const url = pathname || (req && (req.originalUrl || req.url || req.path)) || '';
   // If the request is for HRMS employee documents (e.g. GET /api/documents, /api/documents?userId=...), let Express handle it
-  if (pathname === '/api/documents' || pathname === '/api/documents/' || (pathname.startsWith('/api/documents') && !pathname.includes('/file') && !pathname.includes('/time') && !pathname.includes('/archive'))) {
+  if (url === '/api/documents' || url === '/api/documents/' || (url.startsWith('/api/documents') && !url.includes('/file') && !url.includes('/time') && !url.includes('/archive'))) {
     return false;
   }
-  return pathname.startsWith('/api/upload') || 
-         pathname.startsWith('/api/inventory') || 
-         pathname.startsWith('/api/export') || 
-         pathname.startsWith('/api/templates') || 
-         pathname.startsWith('/api/v1/invoice') ||
-         (pathname.startsWith('/api/documents/') && (pathname.includes('/file') || pathname.includes('/time') || pathname.includes('/archive')));
+  return url.startsWith('/api/upload') || 
+         url.startsWith('/upload') || 
+         url.startsWith('/api/inventory') || 
+         url.startsWith('/inventory') || 
+         url.startsWith('/api/export') || 
+         url.startsWith('/export') || 
+         url.startsWith('/api/templates') || 
+         url.startsWith('/templates') || 
+         url.startsWith('/api/v1/invoice') ||
+         (url.includes('/documents/') && (url.includes('/file') || url.includes('/time') || url.includes('/archive')));
 };
 
 const { handleInvoiceExpressFallback } = require('./modules/invoice/routes/invoiceExpressFallback');
@@ -69,7 +74,8 @@ const invoiceProxy = createProxyMiddleware({
 });
 
 app.use((req, res, next) => {
-    if (invoiceFilter(req.path, req)) {
+    const fullUrl = req.originalUrl || req.url || req.path;
+    if (invoiceFilter(fullUrl, req)) {
         if (process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
             return handleInvoiceExpressFallback(req, res);
         }
