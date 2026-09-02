@@ -271,7 +271,10 @@ export default function ValidationPage() {
     };
     const onUnload = () => {
       if (selectedDocRef.current) {
-        const url = `http://${window.location.hostname}:8000/api/documents/${selectedDocRef.current.document_id}/time`;
+        const baseUrl = (import.meta.env && import.meta.env.VITE_API_URL) 
+          ? import.meta.env.VITE_API_URL.replace(/\/$/, '') 
+          : `http://${window.location.hostname}:8000/api`;
+        const url = `${baseUrl}/documents/${selectedDocRef.current.document_id}/time`;
         const blob = new Blob([JSON.stringify({ verification_time: verificationTimeRef.current })], { type: "application/json" });
         navigator.sendBeacon(url, blob);
       }
