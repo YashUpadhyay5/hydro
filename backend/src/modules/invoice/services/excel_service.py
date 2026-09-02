@@ -1,4 +1,5 @@
 import os
+import re
 import pandas as pd
 from sqlalchemy.orm import Session
 from config import Config
@@ -19,6 +20,20 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
+def parse_numeric(val):
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    val_str = str(val).strip().replace(",", "").replace("₹", "").replace("$", "")
+    match = re.search(r"[-+]?\d*\.?\d+", val_str)
+    if match:
+        try:
+            return float(match.group(0))
+        except:
+            return 0.0
+    return 0.0
+
 
 class ExcelService:
 
@@ -35,9 +50,12 @@ class ExcelService:
         else:
             sections = tpl.sections
 
-        # 2. Get enabled fields list
+        # 2. Build column mapping from template sections
         columns_mapping = []
         items_section_id = "item_details"
+
+        # Track whether item subtotal/tax columns are explicitly generated
+        has_custom_item_cols = False
 
         for sec in sections:
             if not sec.get("enabled", True):
@@ -47,7 +65,18 @@ class ExcelService:
                 items_section_id = sec_id
                 for field in sec.get("fields", []):
                     if not field.get("hidden", False):
-                        columns_mapping.append((sec_id, field["key"], f"Item - {field['label']}", field.get("type", "Text")))
+                        f_key = field["key"]
+                        col_label = f"Item - {field['label']}"
+                        columns_mapping.append((sec_id, f_key, col_label, field.get("type", "Text")))
+                        
+                        # Inject row-level computed columns right after unit_price
+                        if f_key == "unit_price":
+                            columns_mapping.append((sec_id, "computed_subtotal", "Item - Subtotal (Qty × Rate)", "Currency"))
+                            columns_mapping.append((sec_id, "computed_cgst", "Item - CGST", "Currency"))
+                            columns_mapping.append((sec_id, "computed_sgst", "Item - SGST", "Currency"))
+                            columns_mapping.append((sec_id, "computed_igst", "Item - IGST", "Currency"))
+                            columns_mapping.append((sec_id, "computed_total_tax", "Item - Total Tax", "Currency"))
+                            has_custom_item_cols = True
             else:
                 for field in sec.get("fields", []):
                     if not field.get("hidden", False):
@@ -73,33 +102,108 @@ class ExcelService:
 
         for doc in docs:
             ext = doc.final_extraction or (doc.ocr_result.get("extraction") if doc.ocr_result else {}) or {}
-            
-            # Extract line items
-            items_list = ext.get(items_section_id, ext.get("items", [])) or []
-            if not isinstance(items_list, list):
-                items_list = []
-                
-            if not items_list:
-                items_list = [{}]
+            ext = ext or {}
 
-            # Track metrics
+            # Invoice-level tax summary
+            tax_sum = ext.get("tax_summary", {}) or {}
+            inv_subtotal = safe_float(tax_sum.get("subtotal") or tax_sum.get("taxable_amount"))
+            inv_cgst = safe_float(tax_sum.get("cgst") or tax_sum.get("cgst_amount"))
+            inv_sgst = safe_float(tax_sum.get("sgst") or tax_sum.get("sgst_amount"))
+            inv_igst = safe_float(tax_sum.get("igst") or tax_sum.get("igst_amount"))
+            inv_grand_total = safe_float(tax_sum.get("grand_total") or tax_sum.get("calculated_grand_total"))
+
+            # Track unique vendors
             vendor_details = ext.get("vendor_details", {}) or {}
             v_name = vendor_details.get("name", "")
             if v_name:
                 unique_vendors.add(v_name)
 
-            for item in items_list:
+            # Extract line items
+            items_list = ext.get(items_section_id, ext.get("items", [])) or []
+            if not isinstance(items_list, list) or len(items_list) == 0:
+                items_list = [{}]
+
+            total_items_in_doc = len(items_list)
+
+            for item_idx, item in enumerate(items_list):
+                if not isinstance(item, dict):
+                    item = {}
+                is_last_item = (item_idx == total_items_in_doc - 1)
+
+                # 1. Parse quantity and price
+                raw_qty = item.get("quantity", "")
+                raw_price = item.get("unit_price", "")
+                qty_num = parse_numeric(raw_qty)
+                price_num = parse_numeric(raw_price)
+
+                # 2. Compute Item Subtotal
+                if qty_num > 0 and price_num > 0:
+                    item_subtotal = round(qty_num * price_num, 2)
+                else:
+                    item_subtotal = safe_float(item.get("taxable_amount") or item.get("total_amount", 0.0))
+
+                # 3. Compute Item GST (CGST, SGST, IGST)
+                if "cgst_amount" in item or "sgst_amount" in item or "igst_amount" in item:
+                    item_cgst = safe_float(item.get("cgst_amount"))
+                    item_sgst = safe_float(item.get("sgst_amount"))
+                    item_igst = safe_float(item.get("igst_amount"))
+                else:
+                    raw_item_tax = safe_float(item.get("tax_amount"))
+                    if raw_item_tax == 0.0 and "tax_rate" in item:
+                        item_rate = parse_numeric(item.get("tax_rate"))
+                        if item_rate > 0:
+                            raw_item_tax = round(item_subtotal * (item_rate / 100.0), 2)
+                    
+                    if inv_igst > 0:
+                        item_cgst = 0.0
+                        item_sgst = 0.0
+                        item_igst = raw_item_tax
+                    else:
+                        item_cgst = round(raw_item_tax / 2.0, 2)
+                        item_sgst = round(raw_item_tax / 2.0, 2)
+                        item_igst = 0.0
+
+                item_total_tax = round(item_cgst + item_sgst + item_igst, 2)
+                item_total = round(item_subtotal + item_total_tax, 2) if item_subtotal > 0 else safe_float(item.get("total_amount", 0.0))
+
+                # 4. Construct Row dictionary
                 row_dict = {}
-                item_qty = 0.0
-                item_total = 0.0
-                
                 for sec_id, f_key, col_header, f_type in columns_mapping:
                     if sec_id in ["item_details", "items"]:
-                        val = item.get(f_key, "")
-                        if f_key == "quantity":
-                            item_qty = safe_float(val)
-                        if f_key == "total_amount":
-                            item_total = safe_float(val)
+                        if f_key == "computed_subtotal" or f_key == "subtotal":
+                            val = item_subtotal
+                        elif f_key == "computed_cgst" or f_key == "cgst":
+                            val = item_cgst
+                        elif f_key == "computed_sgst" or f_key == "sgst":
+                            val = item_sgst
+                        elif f_key == "computed_igst" or f_key == "igst":
+                            val = item_igst
+                        elif f_key == "computed_total_tax" or f_key == "tax_amount":
+                            val = item_total_tax
+                        elif f_key == "total_amount":
+                            val = item_total
+                        elif f_key == "taxable_amount":
+                            val = item_subtotal
+                        else:
+                            val = item.get(f_key, "")
+                    elif sec_id in ["tax_summary", "tax_details"]:
+                        # Invoice level totals are ONLY shown on the last row of the invoice
+                        if is_last_item:
+                            sec_val = ext.get(sec_id, {}) or {}
+                            if f_key == "subtotal" or f_key == "taxable_amount":
+                                val = inv_subtotal
+                            elif f_key == "cgst":
+                                val = inv_cgst
+                            elif f_key == "sgst":
+                                val = inv_sgst
+                            elif f_key == "igst":
+                                val = inv_igst
+                            elif f_key == "grand_total":
+                                val = inv_grand_total
+                            else:
+                                val = sec_val.get(f_key, "") if isinstance(sec_val, dict) else ""
+                        else:
+                            val = ""
                     else:
                         sec_val = ext.get(sec_id, {}) or {}
                         val = sec_val.get(f_key, "") if isinstance(sec_val, dict) else ""
@@ -107,7 +211,7 @@ class ExcelService:
                     row_dict[col_header] = val
                 
                 rows.append(row_dict)
-                total_qty += item_qty
+                total_qty += qty_num
                 total_value += item_total
                 total_records_count += 1
 
@@ -139,6 +243,14 @@ class ExcelService:
                 sheet_name="Inventory Records",
                 index=False
             )
+
+            # Auto-fit column widths
+            workbook = writer.book
+            worksheet = writer.sheets["Inventory Records"]
+            for i, col in enumerate(df.columns):
+                val_lens = [len(str(v)) for v in df[col].values if v is not None and v != ""]
+                max_len = max(val_lens + [len(str(col))]) + 3 if val_lens else len(str(col)) + 3
+                worksheet.set_column(i, i, min(max(max_len, 10), 50))
 
             summary_df = pd.DataFrame([
                 {
