@@ -55,17 +55,25 @@ const invoiceFilter = (pathname, req) => {
          (pathname.startsWith('/api/documents/') && (pathname.includes('/file') || pathname.includes('/time') || pathname.includes('/archive')));
 };
 
+const { handleInvoiceExpressFallback } = require('./modules/invoice/routes/invoiceExpressFallback');
+
 const invoiceProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
     pathRewrite: {
         '^/api/v1/invoice': '/api'
+    },
+    onError: (err, req, res) => {
+        return handleInvoiceExpressFallback(req, res);
     }
 });
 
 app.use((req, res, next) => {
     if (invoiceFilter(req.path, req)) {
-        return invoiceProxy(req, res, next);
+        return invoiceProxy(req, res, (err) => {
+            if (err) return handleInvoiceExpressFallback(req, res);
+            next();
+        });
     }
     next();
 });
