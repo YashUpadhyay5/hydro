@@ -19,8 +19,11 @@ export default function Login() {
         setLoading(true);
         setError('');
         try {
-            // Call the common authentication endpoint on port 8000
-            const response = await axios.post(`http://${window.location.hostname}:8000/api/v1/auth/login`, {
+            const loginUrl = (import.meta.env && import.meta.env.VITE_API_URL)
+                ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/auth/login`
+                : `http://${window.location.hostname}:8000/api/v1/auth/login`;
+
+            const response = await axios.post(loginUrl, {
                 email,
                 password
             });
