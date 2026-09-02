@@ -24,7 +24,11 @@ function DocumentPreview({ document, verificationTime = 0, timerActive = false, 
   const isPdf = !isUploading && (filename.toLowerCase().endsWith(".pdf") || filePath.toLowerCase().endsWith(".pdf"));
 
   const token = localStorage.getItem("token") || "";
-  const fileUrl = isUploading ? "" : `http://${window.location.hostname}:8000/api/documents/${document.document_id}/file?token=${token}`;
+  const docId = document.document_id || document.id || "";
+  const apiBaseUrl = (import.meta.env && import.meta.env.VITE_API_URL)
+    ? import.meta.env.VITE_API_URL.replace(/\/$/, '')
+    : `http://${window.location.hostname}:8000/api`;
+  const fileUrl = isUploading || !docId ? "" : `${apiBaseUrl}/documents/${docId}/file?token=${token}`;
 
   const zoomIn = () => setZoom((z) => Math.min(z + 0.1, 2.5));
   const zoomOut = () => setZoom((z) => Math.max(z - 0.1, 0.5));
