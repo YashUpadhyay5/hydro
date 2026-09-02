@@ -132,9 +132,11 @@ const CACHE_TTL_MS = 15000;
 router.get('/latest-all', async (req, res) => {
   try {
     const now = Date.now();
-    if (latestAllCache && (now - lastCacheTime < CACHE_TTL_MS)) {
+    const bypassCache = req.query.fresh === 'true' || req.query._t;
+    if (!bypassCache && latestAllCache && (now - lastCacheTime < CACHE_TTL_MS)) {
       return res.status(200).json(latestAllCache);
     }
+    console.log('[LATEST-ALL] Generating fresh collapsed footprints payload...');
 
     const sequelize = require('../../../../config/database');
     const Employee = require('../../../../shared/models/Employee');
@@ -207,45 +209,76 @@ router.get('/latest-all', async (req, res) => {
       const uid = String(r.user_id).trim().toLowerCase();
       return clockedInMap.has(uid);
     });
-    
-    const coveredUserIds = new Set();
-    const footprints = filteredResults.map(r => {
-      const uid = String(r.user_id).trim().toLowerCase();
-      const attInfo = clockedInMap.get(uid) || {};
-      coveredUserIds.add(uid);
-      if (attInfo.userName) coveredUserIds.add(String(attInfo.userName).trim().toLowerCase());
 
-      return {
-        id: r.id,
-        userId: r.user_id,
-        userName: attInfo.userName || undefined,
-        workMode: attInfo.workMode || 'OFFICE',
-        timestamp: Number(r.timestamp),
-        date: r.date,
-        trackingMethod: r.tracking_method,
-        latitude: Number(r.latitude),
-        longitude: Number(r.longitude),
-        address: r.address,
-        accuracy: r.accuracy,
-        speed: r.speed,
-        heading: r.heading,
-        altitude: r.altitude,
-        cellId: r.cell_id,
-        lac: r.lac,
-        tac: r.tac,
-        mcc: r.mcc,
-        mnc: r.mnc,
-        signalStrength: r.signal_strength,
-        locationEnabled: r.location_enabled === 1 || r.location_enabled === true || r.location_enabled === 'true',
-        batteryLevel: r.battery_level != null ? Number(r.battery_level) : 75,
-        batteryTemp: r.battery_temp,
-        networkType: r.network_type,
-        reason: r.reason,
-        isMockLocation: r.is_mock_location === 1 || r.is_mock_location === true
+    // Map employee lookup by any identifier (id, empCode, name)
+    const empLookup = new Map();
+    activeEmps.forEach(emp => {
+      const canonical = String(emp.empCode || emp.emp_code || emp.id).trim();
+      const info = {
+        canonicalId: canonical,
+        empCode: canonical,
+        name: emp.name,
+        role: emp.role,
+        designation: emp.designation
       };
+      if (emp.id) empLookup.set(String(emp.id).trim().toLowerCase(), info);
+      if (emp.empCode) empLookup.set(String(emp.empCode).trim().toLowerCase(), info);
+      if (emp.emp_code) empLookup.set(String(emp.emp_code).trim().toLowerCase(), info);
+      if (emp.name) empLookup.set(String(emp.name).trim().toLowerCase(), info);
     });
 
-    // Fallback: If an actively clocked-in employee has no rows in location_footprints (e.g. W22), use their clock-in coords
+    // Collapse to the absolute latest footprint per canonical employee
+    const latestPerEmployee = new Map();
+    const coveredUserIds = new Set();
+
+    filteredResults.forEach(r => {
+      const uid = String(r.user_id).trim().toLowerCase();
+      const empInfo = empLookup.get(uid);
+      const canonicalId = empInfo ? empInfo.canonicalId : String(r.user_id).trim();
+      const attInfo = clockedInMap.get(uid) || {};
+
+      coveredUserIds.add(uid);
+      coveredUserIds.add(canonicalId.toLowerCase());
+      if (attInfo.userName) coveredUserIds.add(String(attInfo.userName).trim().toLowerCase());
+
+      const existing = latestPerEmployee.get(canonicalId.toLowerCase());
+      if (!existing || Number(r.timestamp) > Number(existing.timestamp)) {
+        latestPerEmployee.set(canonicalId.toLowerCase(), {
+          id: r.id,
+          userId: canonicalId,
+          rawUserId: r.user_id,
+          userName: (empInfo && empInfo.name) || attInfo.userName || undefined,
+          empCode: (empInfo && empInfo.empCode) || canonicalId,
+          workMode: attInfo.workMode || 'OFFICE',
+          timestamp: Number(r.timestamp),
+          date: r.date,
+          trackingMethod: r.tracking_method,
+          latitude: Number(r.latitude),
+          longitude: Number(r.longitude),
+          address: r.address,
+          accuracy: r.accuracy,
+          speed: r.speed,
+          heading: r.heading,
+          altitude: r.altitude,
+          cellId: r.cell_id,
+          lac: r.lac,
+          tac: r.tac,
+          mcc: r.mcc,
+          mnc: r.mnc,
+          signalStrength: r.signal_strength,
+          locationEnabled: r.location_enabled === 1 || r.location_enabled === true || r.location_enabled === 'true',
+          batteryLevel: r.battery_level != null ? Number(r.battery_level) : 75,
+          batteryTemp: r.battery_temp,
+          networkType: r.network_type,
+          reason: r.reason,
+          isMockLocation: r.is_mock_location === 1 || r.is_mock_location === true
+        });
+      }
+    });
+
+    const footprints = Array.from(latestPerEmployee.values());
+
+    // Fallback: If an actively clocked-in employee has no rows in location_footprints, use their clock-in coords
     activeAttendances.forEach(att => {
       const attUid = String(att.userId || '').trim().toLowerCase();
       const attUName = String(att.userName || '').trim().toLowerCase();
@@ -262,10 +295,14 @@ router.get('/latest-all', async (req, res) => {
 
         if (lat && lon) {
           const mode = (att.workMode || 'OFFICE').toUpperCase();
+          const empInfo = empLookup.get(attUid) || empLookup.get(attUName);
+          const canonicalId = empInfo ? empInfo.canonicalId : (att.userId || att.userName);
+
           footprints.push({
             id: att.id,
-            userId: att.userId || att.userName,
-            userName: att.userName || undefined,
+            userId: canonicalId,
+            userName: (empInfo && empInfo.name) || att.userName || undefined,
+            empCode: (empInfo && empInfo.empCode) || canonicalId,
             workMode: mode,
             timestamp: new Date(att.updatedAt || att.createdAt).getTime() || Date.now(),
             date: att.date || todayStr,
