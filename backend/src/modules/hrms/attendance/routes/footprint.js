@@ -188,53 +188,16 @@ router.get('/latest-all', async (req, res) => {
       }
     });
 
+    const todayStartMs = new Date(`${todayStr}T00:00:00Z`).getTime();
     const query = `
-      SELECT 
-        f_loc.id,
-        f_loc.user_id,
-        f_loc.timestamp,
-        f_loc.date,
-        f_loc.tracking_method,
-        f_loc.latitude,
-        f_loc.longitude,
-        f_loc.address,
-        f_loc.accuracy,
-        f_loc.speed,
-        f_loc.heading,
-        f_loc.altitude,
-        f_loc.cell_id,
-        f_loc.lac,
-        f_loc.tac,
-        f_loc.mcc,
-        f_loc.mnc,
-        f_loc.signal_strength,
-        f_loc.location_enabled,
-        COALESCE(f_bat.battery_level, f_loc.battery_level) as battery_level,
-        COALESCE(f_bat.battery_temp, f_loc.battery_temp) as battery_temp,
-        f_loc.network_type,
-        f_loc.reason,
-        f_loc.is_mock_location
-      FROM (
-        SELECT f1.* FROM location_footprints f1
-        INNER JOIN (
-          SELECT user_id, MAX(timestamp) as max_ts 
-          FROM location_footprints 
-          WHERE date = '${todayStr}' OR date LIKE '%${todayStr}%'
-          GROUP BY user_id
-        ) f2 ON f1.user_id = f2.user_id AND f1.timestamp = f2.max_ts
-      ) f_loc
-      LEFT JOIN (
-        SELECT f3.* FROM location_footprints f3
-        INNER JOIN (
-          SELECT user_id, MAX(timestamp) as max_ts 
-          FROM location_footprints 
-          WHERE battery_level IS NOT NULL 
-            AND battery_level != 1.0 
-            AND battery_level != 100 
-            AND battery_level != 100.0
-          GROUP BY user_id
-        ) f4 ON f3.user_id = f4.user_id AND f3.timestamp = f4.max_ts
-      ) f_bat ON f_loc.user_id = f_bat.user_id
+      SELECT f1.*
+      FROM location_footprints f1
+      INNER JOIN (
+        SELECT user_id, MAX(timestamp) as max_ts
+        FROM location_footprints
+        WHERE (date = '${todayStr}' OR timestamp >= ${todayStartMs})
+        GROUP BY user_id
+      ) f2 ON f1.user_id = f2.user_id AND f1.timestamp = f2.max_ts;
     `;
     const results = await sequelize.query(query, { type: sequelize.QueryTypes.SELECT });
     

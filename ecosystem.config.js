@@ -4,6 +4,7 @@ module.exports = {
       name: 'hydro-express-backend',
       script: 'src/server.js',
       cwd: 'C:/Users/Falcon/Desktop/hydro-copy/Hydro/backend',
+      node_args: '--max-old-space-size=4096',
       env: {
         NODE_ENV: 'production',
         PORT: 8000
