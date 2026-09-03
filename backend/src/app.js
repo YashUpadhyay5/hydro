@@ -44,6 +44,12 @@ app.use(corsManager);
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const invoiceFilter = (pathname, req) => {
   const url = pathname || (req && (req.originalUrl || req.url || req.path)) || '';
+  const method = req ? req.method : '';
+
+  if (method === 'DELETE' && (url.includes('/documents/') || url.includes('/v1/invoice'))) {
+    return true;
+  }
+
   // If the request is for HRMS employee documents (e.g. GET /api/documents, /api/documents?userId=...), let Express handle it
   if (url === '/api/documents' || url === '/api/documents/' || (url.startsWith('/api/documents') && !url.includes('/file') && !url.includes('/time') && !url.includes('/archive'))) {
     return false;

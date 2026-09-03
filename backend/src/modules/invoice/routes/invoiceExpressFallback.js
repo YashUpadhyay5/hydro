@@ -291,22 +291,18 @@ const handleInvoiceExpressFallback = async (req, res) => {
     const targetId = docMatch ? docMatch[1] : (req.params?.id || null);
 
     if (targetId) {
-      const idx = inMemoryDocuments.findIndex(d => d.document_id === targetId || d.id === targetId);
-      if (idx !== -1) {
-        inMemoryDocuments.splice(idx, 1);
+      for (let i = inMemoryDocuments.length - 1; i >= 0; i--) {
+        if (inMemoryDocuments[i].id === targetId || inMemoryDocuments[i].document_id === targetId) {
+          inMemoryDocuments.splice(i, 1);
+        }
       }
       try {
         const Document = require('../../../../shared/models/Document');
-        if (Document) {
-          const { Op } = require('sequelize');
-          await Document.destroy({
-            where: {
-              [Op.or]: [{ id: targetId }, { documentId: targetId }]
-            }
-          });
+        if (Document && /^[0-9a-fA-F-]{36}$/.test(targetId)) {
+          await Document.destroy({ where: { id: targetId } });
         }
       } catch (dbErr) {
-        console.warn("[Invoice Fallback Delete Warning]", dbErr.message);
+        console.warn("[Invoice Fallback Delete DB Notice]", dbErr.message);
       }
     }
 

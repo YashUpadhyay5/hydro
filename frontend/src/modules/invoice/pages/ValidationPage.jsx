@@ -429,9 +429,8 @@ export default function ValidationPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!selectedDocument) return;
-    const targetId = selectedDocument.document_id || selectedDocument.id;
+  const handleDelete = async (docIdParam) => {
+    const targetId = (typeof docIdParam === "string" && docIdParam) ? docIdParam : (selectedDocument?.document_id || selectedDocument?.id);
     if (!targetId) return;
 
     if (!window.confirm("Are you sure you want to delete this invoice record?")) return;
