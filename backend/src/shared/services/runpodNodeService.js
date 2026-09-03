@@ -1,16 +1,12 @@
 /**
- * RunPod Serverless AI OCR Node.js Client & Dynamic Extraction Engine
- * Connects Node.js Express backend directly to RunPod Serverless AI model API
- * with automatic Bank Details Regex Post-Processor and complete document signatures.
+ * RunPod Serverless AI OCR Node.js Client
+ * Pure Direct Integration with RunPod Serverless AI Model Endpoint
+ * Zero mock/fallback datasets — Returns exact JSON returned by RunPod AI model
+ * with Bank Heuristic Regex Post-Processor.
  */
 
 const https = require('https');
 
-const RUNPOD_ENDPOINT_ID = process.env.RUNPOD_ENDPOINT_ID || 'ocr-model-v2';
-const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY || '';
-const OCR_API_URL = process.env.OCR_API_URL || (RUNPOD_ENDPOINT_ID ? `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/runsync` : '');
-
-// Bank Name Lookup Map from 4-letter IFSC Prefix
 const IFSC_BANK_MAP = {
   'HDFC': 'HDFC BANK',
   'ICIC': 'ICICI BANK',
@@ -36,106 +32,23 @@ const IFSC_BANK_MAP = {
 };
 
 /**
- * Dynamically extracts invoice data from file buffer or Base64 data.
- * @param {Buffer} fileBuffer - Real uploaded invoice file buffer
+ * Sends uploaded invoice directly to RunPod Serverless AI Endpoint
+ * @param {Buffer} fileBuffer - Uploaded invoice file buffer
  * @param {string} mimeType - File mime type
  * @param {string} filename - Original filename
- * @returns {Promise<Object>} Dynamic extraction JSON object
+ * @returns {Promise<Object>} Exact JSON payload returned by RunPod AI model
  */
 const extractInvoiceData = async (fileBuffer, mimeType = 'application/pdf', filename = 'invoice.pdf') => {
-  let base64Data = '';
-  try {
-    base64Data = Buffer.isBuffer(fileBuffer)
-      ? fileBuffer.toString('base64')
-      : (typeof fileBuffer === 'string' ? fileBuffer.replace(/^data:.*?;base64,/, '') : '');
+  const base64Data = Buffer.isBuffer(fileBuffer)
+    ? fileBuffer.toString('base64')
+    : (typeof fileBuffer === 'string' ? fileBuffer.replace(/^data:.*?;base64,/, '') : '');
 
-    // 1. Attempt RunPod Serverless AI API call if API Key is configured on environment
-    if (process.env.RUNPOD_API_KEY && process.env.RUNPOD_ENDPOINT_ID) {
-      try {
-        console.log(`[RunPod AI] Sending base64 payload of '${filename}' directly to RunPod endpoint...`);
-        const runpodResult = await callRunPodAPI(base64Data, filename, mimeType);
-        if (runpodResult) {
-          const formatted = formatExtractionPayload(runpodResult);
-          return enrichBankDetails(formatted, base64Data, fileBuffer);
-        }
-      } catch (runpodErr) {
-        console.warn("[RunPod API Warning] Falling back to dynamic vision parser:", runpodErr.message);
-      }
-    }
+  console.log(`[RunPod AI] Forwarding upload '${filename}' directly to RunPod Serverless AI Endpoint...`);
 
-    // 2. Dynamic Smart Document Parser Engine (analyzes file metadata & content)
-    const result = generateDynamicExtraction(filename, base64Data, fileBuffer);
-    return enrichBankDetails(result, base64Data, fileBuffer);
-
-  } catch (err) {
-    console.error("[RunPod Node Service Error]", err.message);
-    const fallback = generateDynamicExtraction(filename, '', fileBuffer);
-    return enrichBankDetails(fallback, base64Data, fileBuffer);
-  }
-};
-
-/**
- * Heuristic Rule-Based Bank Details Extractor
- * Automatically extracts & populates bank_name, account_number, and ifsc_code
- * without needing to retrain the AI vision model.
- */
-const enrichBankDetails = (payload, base64Data = '', fileBuffer = null) => {
-  try {
-    if (!payload) return payload;
-    if (!payload.bank_details) payload.bank_details = {};
-
-    let textContent = '';
-    if (Buffer.isBuffer(fileBuffer)) {
-      textContent = fileBuffer.toString('utf8');
-    } else if (base64Data) {
-      try {
-        textContent = Buffer.from(base64Data, 'base64').toString('utf8');
-      } catch (e) {
-        textContent = base64Data;
-      }
-    }
-
-    const bank = payload.bank_details;
-
-    // 1. Extract IFSC Code using Regex
-    if (!bank.ifsc_code || bank.ifsc_code === 'null' || bank.ifsc_code === '') {
-      const ifscMatch = textContent.match(/([A-Z]{4}0[A-Z0-9]{6})/i);
-      if (ifscMatch) {
-        bank.ifsc_code = ifscMatch[1].toUpperCase();
-      }
-    }
-
-    // 2. Infer Bank Name from IFSC Prefix if missing
-    if (!bank.bank_name || bank.bank_name === 'null' || bank.bank_name === '') {
-      if (bank.ifsc_code && bank.ifsc_code.length >= 4) {
-        const prefix = bank.ifsc_code.substring(0, 4).toUpperCase();
-        if (IFSC_BANK_MAP[prefix]) {
-          bank.bank_name = IFSC_BANK_MAP[prefix];
-        }
-      }
-
-      if (!bank.bank_name) {
-        const bankNameMatch = textContent.match(/(HDFC BANK|ICICI BANK|STATE BANK OF INDIA|AXIS BANK|KOTAK MAHINDRA BANK|PUNJAB NATIONAL BANK|CANARA BANK|BANK OF BARODA|YES BANK|UNION BANK)/i);
-        if (bankNameMatch) {
-          bank.bank_name = bankNameMatch[1].toUpperCase();
-        }
-      }
-    }
-
-    // 3. Extract Account Number using Regex
-    if (!bank.account_number || bank.account_number === 'null' || bank.account_number === '') {
-      const accMatch = textContent.match(/(?:A\/C|Account|Acct|Acc)(?:\s*No|\s*Number|\s*#)?[\s:-]*([0-9]{9,18})/i);
-      if (accMatch) {
-        bank.account_number = accMatch[1].trim();
-      }
-    }
-
-    payload.bank_details = bank;
-    return payload;
-  } catch (err) {
-    console.error("[Bank Post-Processor Error]", err.message);
-    return payload;
-  }
+  // Direct Call to RunPod Endpoint — Throws explicit error if RunPod fails
+  const runpodResult = await callRunPodAPI(base64Data, filename, mimeType);
+  const formatted = formatExtractionPayload(runpodResult);
+  return enrichBankDetails(formatted, base64Data, fileBuffer);
 };
 
 /**
@@ -143,14 +56,15 @@ const enrichBankDetails = (payload, base64Data = '', fileBuffer = null) => {
  */
 const callRunPodAPI = (base64Data, filename, mimeType) => {
   return new Promise((resolve, reject) => {
-    const endpointId = process.env.RUNPOD_ENDPOINT_ID || RUNPOD_ENDPOINT_ID;
-    const apiKey = process.env.RUNPOD_API_KEY || RUNPOD_API_KEY;
-    const urlStr = process.env.OCR_API_URL || OCR_API_URL || `https://api.runpod.ai/v2/${endpointId}/runsync`;
+    const endpointId = process.env.RUNPOD_ENDPOINT_ID;
+    const apiKey = process.env.RUNPOD_API_KEY;
+    const ocrUrl = process.env.OCR_API_URL;
 
-    if (!apiKey) {
-      return reject(new Error("RUNPOD_API_KEY environment variable is not set."));
+    if (!apiKey || (!endpointId && !ocrUrl)) {
+      return reject(new Error("RUNPOD_API_KEY or RUNPOD_ENDPOINT_ID environment variable is missing in Render settings. Please set RUNPOD_API_KEY and RUNPOD_ENDPOINT_ID in Render dashboard."));
     }
 
+    const urlStr = ocrUrl || `https://api.runpod.ai/v2/${endpointId}/runsync`;
     const url = new URL(urlStr);
     
     const payload = JSON.stringify({
@@ -180,6 +94,10 @@ const callRunPodAPI = (base64Data, filename, mimeType) => {
       res.on('data', chunk => body += chunk);
       res.on('end', async () => {
         try {
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            return reject(new Error(`RunPod API HTTP Error ${res.statusCode}: ${body || res.statusMessage}`));
+          }
+
           const resJson = JSON.parse(body);
           if (resJson.status === 'COMPLETED') {
             const output = resJson.output || resJson.result || resJson;
@@ -196,10 +114,10 @@ const callRunPodAPI = (base64Data, filename, mimeType) => {
       });
     });
 
-    req.on('error', reject);
+    req.on('error', (err) => reject(new Error(`RunPod Network Request Error: ${err.message}`)));
     req.setTimeout(60000, () => {
       req.destroy();
-      reject(new Error('RunPod API request timed out after 60s'));
+      reject(new Error('RunPod API request timed out after 60s. Your RunPod serverless pod may be cold-starting.'));
     });
 
     req.write(payload);
@@ -240,7 +158,7 @@ const pollRunPodStatus = (hostname, endpointId, jobId, apiKey) => {
               resolve(resJson.output || resJson);
             } else if (resJson.status === 'FAILED') {
               clearInterval(interval);
-              reject(new Error(resJson.error || 'RunPod job failed'));
+              reject(new Error(resJson.error || 'RunPod job failed on GPU container'));
             }
           } catch (e) {}
         });
@@ -250,6 +168,65 @@ const pollRunPodStatus = (hostname, endpointId, jobId, apiKey) => {
       req.end();
     }, 2000);
   });
+};
+
+/**
+ * Heuristic Rule-Based Bank Details Extractor
+ */
+const enrichBankDetails = (payload, base64Data = '', fileBuffer = null) => {
+  try {
+    if (!payload) return payload;
+    if (!payload.bank_details) payload.bank_details = {};
+
+    let textContent = '';
+    if (Buffer.isBuffer(fileBuffer)) {
+      textContent = fileBuffer.toString('utf8');
+    } else if (base64Data) {
+      try {
+        textContent = Buffer.from(base64Data, 'base64').toString('utf8');
+      } catch (e) {
+        textContent = base64Data;
+      }
+    }
+
+    const bank = payload.bank_details;
+
+    if (!bank.ifsc_code || bank.ifsc_code === 'null' || bank.ifsc_code === '') {
+      const ifscMatch = textContent.match(/([A-Z]{4}0[A-Z0-9]{6})/i);
+      if (ifscMatch) {
+        bank.ifsc_code = ifscMatch[1].toUpperCase();
+      }
+    }
+
+    if (!bank.bank_name || bank.bank_name === 'null' || bank.bank_name === '') {
+      if (bank.ifsc_code && bank.ifsc_code.length >= 4) {
+        const prefix = bank.ifsc_code.substring(0, 4).toUpperCase();
+        if (IFSC_BANK_MAP[prefix]) {
+          bank.bank_name = IFSC_BANK_MAP[prefix];
+        }
+      }
+
+      if (!bank.bank_name) {
+        const bankNameMatch = textContent.match(/(HDFC BANK|ICICI BANK|STATE BANK OF INDIA|AXIS BANK|KOTAK MAHINDRA BANK|PUNJAB NATIONAL BANK|CANARA BANK|BANK OF BARODA|YES BANK|UNION BANK)/i);
+        if (bankNameMatch) {
+          bank.bank_name = bankNameMatch[1].toUpperCase();
+        }
+      }
+    }
+
+    if (!bank.account_number || bank.account_number === 'null' || bank.account_number === '') {
+      const accMatch = textContent.match(/(?:A\/C|Account|Acct|Acc)(?:\s*No|\s*Number|\s*#)?[\s:-]*([0-9]{9,18})/i);
+      if (accMatch) {
+        bank.account_number = accMatch[1].trim();
+      }
+    }
+
+    payload.bank_details = bank;
+    return payload;
+  } catch (err) {
+    console.error("[Bank Post-Processor Error]", err.message);
+    return payload;
+  }
 };
 
 /**
@@ -295,230 +272,6 @@ const formatExtractionPayload = (raw) => {
     },
     items: ext?.items || ext?.item_details || []
   };
-};
-
-/**
- * Generates dynamic invoice extraction based on document signature & filename
- */
-const generateDynamicExtraction = (filename, base64Data, fileBuffer) => {
-  const cleanName = (filename || '').toLowerCase();
-
-  // 1. MULKH RAJ HANS RAJ (MRHR) Dataset (Invoice 2299, M.S. PIPES TATA, Grand Total 38,941.00)
-  const mulkhDataset = {
-    invoice_details: {
-      invoice_number: "2299",
-      invoice_date: "20-05-2026",
-      due_date: "2026-06-04",
-      po_number: "CREDIT"
-    },
-    vendor_details: {
-      name: "MULKH RAJ HANS RAJ",
-      gstin: "03AABFM1851C1Z0",
-      pan: "AABFM1851C",
-      address: "264 East Mohan Nagar, Opp Mata Kaulan Ji Hospital, Amritsar, Punjab 143001",
-      phone: "98145-23592, 94172-72815",
-      email: "mrhr264@rediffmail.com"
-    },
-    consumer_details: {
-      name: "HYDRO MATERIALS PRIVATE LIMITED",
-      gstin: "03AAECH3185L1ZI",
-      address: "KHASRA NO:7//16/2, 7//24/3, 7//25, JHITAN KALAN, AMRITSAR, PUNJAB 143413",
-      phone: "9779334255"
-    },
-    consignee_details: {
-      name: "HYDRO MATERIALS PRIVATE LIMITED",
-      gstin: "03AAECH3185L1ZI",
-      address: "KHASRA NO:7//16/2, 7//24/3, 7//25, JHITAN KALAN, AMRITSAR, PUNJAB 143413"
-    },
-    transport_details: {
-      destination: "AMRITSAR",
-      gr_no: "GYAN SINGH TEMPO",
-      vehicle_number: "PB02BL9648",
-      mode_of_transport: "GYAN SINGH TEMPO"
-    },
-    tax_summary: {
-      subtotal: 32930.55,
-      taxable_amount: 33000.55,
-      cgst: 2970.05,
-      sgst: 2970.05,
-      igst: 0.00,
-      total_tax: 5940.10,
-      round_off: 0.35,
-      grand_total: 38941.00
-    },
-    items: [
-      {
-        description: "M.S.PIPES (730630) 4\" 3 PC TATA",
-        hsn_sac: "730630",
-        quantity: 241.70,
-        unit: "Kgs",
-        rate: 70.50,
-        total_amount: 17039.85
-      },
-      {
-        description: "M.S.PIPES (730630) 3\" 4 PC TATA",
-        hsn_sac: "730630",
-        quantity: 225.40,
-        unit: "Kgs",
-        rate: 70.50,
-        total_amount: 15890.70
-      }
-    ],
-    bank_details: {
-      bank_name: "HDFC BANK",
-      account_number: "50200000405749",
-      ifsc_code: "HDFC0000263",
-      branch: "HALL BAZAR, AMRITSAR"
-    }
-  };
-
-  // 2. SACHIN TEX Dataset (Invoice ST/0149, TOW CUT, LYOCELL, Grand Total 12,009.00)
-  const sachinDataset = {
-    invoice_details: {
-      invoice_number: "ST/0149",
-      invoice_date: "2026-05-20",
-      due_date: "2026-06-20",
-      po_number: "EWAY-552007506002"
-    },
-    vendor_details: {
-      name: "SACHIN TEX",
-      gstin: "33ACGFS9059K1ZL",
-      pan: "ACGFS9059K",
-      address: "116/2B,116/3A,PONNANADAMPALAYAM KANIYUR(PO), SULUR(TK), COIMBATORE-641 659",
-      phone: "+91 9944561167",
-      email: "selvamengg1972@gmail.com"
-    },
-    consumer_details: {
-      name: "M/s.HYDROMATERIALS PRIVATE LIMITED",
-      gstin: "03AAECH3185L1ZI",
-      address: "KHASRA NO:7//16/2,7//24/3,7//25, JHITA KALAN, AMRITSAR-143413"
-    },
-    consignee_details: {
-      name: "BEE CHEMS",
-      gstin: "09AADHS9047N1ZD",
-      address: "E-5 PANKI INDUSTRIAL ESTATE, UTTAR PRADESH KANPUR-208022"
-    },
-    transport_details: {
-      destination: "KANPUR",
-      vehicle_number: "TN37ET9358",
-      gr_no: "EWAY-552007506002",
-      mode_of_transport: "Road Transport"
-    },
-    tax_summary: {
-      subtotal: 11437.00,
-      taxable_amount: 11437.00,
-      cgst: 0.00,
-      sgst: 0.00,
-      igst: 571.85,
-      total_tax: 571.85,
-      round_off: 0.15,
-      grand_total: 12009.00
-    },
-    items: [
-      {
-        description: "TOW CUT",
-        hsn_sac: "55052000",
-        quantity: 22.3,
-        rate: 210.00,
-        total_amount: 4683.00
-      },
-      {
-        description: "VISCOSE FIBER EXCELL (LYOCELL)",
-        hsn_sac: "55041000",
-        quantity: 30.7,
-        rate: 220.00,
-        total_amount: 6754.00
-      }
-    ],
-    bank_details: {
-      bank_name: "ICICI BANK",
-      account_number: "218905001725",
-      ifsc_code: "ICIC0002189",
-      branch: "SARAVANAMPATTI"
-    }
-  };
-
-  // 3. JULLUNDUR PIPE FITTING CO. Dataset
-  const jullundurDataset = {
-    invoice_details: {
-      invoice_number: "JPF/26-27/696",
-      invoice_date: "2026-05-15",
-      due_date: "2026-06-15",
-      po_number: "PO-84818"
-    },
-    vendor_details: {
-      name: "JULLUNDUR PIPE FITTING CO.",
-      gstin: "03AAFFJ0852L2ZG",
-      pan: "AAFFJ0852L",
-      address: "MFG. OF PIPES, PIPE FITTINGS & TUBEWELL ACCESSORIES, CHOWK BHAGAT SINGH, JALANDHAR - 144001 (PUNJAB)",
-      phone: "01815007507, 9814536005",
-      email: "JPF_85IN@YAHOO.CO.IN"
-    },
-    consumer_details: {
-      name: "Hydromaterials Private Limited",
-      gstin: "03AAECH3185L1ZI",
-      address: "KHATONI NO- 441/621, KHASRA NO- 26/4/2, RAMPURA, JHITAN KALAN, AMRITSAR, PUNJAB"
-    },
-    consignee_details: {
-      name: "M/s. M/S RAVEL RUBBER MILL",
-      gstin: "09AABFR1900M1Z8",
-      address: "F-13, BSR INDL. AREA, GHAZIABAD - (Uttar Pradesh), Pin: 201009"
-    },
-    transport_details: {
-      destination: "GHAZIABAD",
-      mode_of_transport: "DELHI PUNJAB GOODS CARRIERS",
-      place_of_supply: "03 (Punjab)"
-    },
-    tax_summary: {
-      subtotal: 54905.00,
-      taxable_amount: 54905.00,
-      cgst: 4941.45,
-      sgst: 4941.45,
-      igst: 0.00,
-      total_tax: 9882.90,
-      round_off: 0.10,
-      grand_total: 64788.00
-    },
-    items: [
-      {
-        description: "BUTTER FLY VALVE 80mm",
-        hsn_sac: "84818030",
-        quantity: 17,
-        rate: 1280.00,
-        total_amount: 21760.00
-      },
-      {
-        description: "BUTTER FLY VALVE 125mm",
-        hsn_sac: "84818030",
-        quantity: 17,
-        rate: 1935.00,
-        total_amount: 32895.00
-      }
-    ],
-    bank_details: {
-      bank_name: "HDFC BANK",
-      account_number: "03412320003253",
-      ifsc_code: "HDFC0000341"
-    }
-  };
-
-  // Match MULKH RAJ HANS RAJ (MRHR, invoice 2299, M.S. PIPES, Tata)
-  if (cleanName.includes('mulkh') || cleanName.includes('mrhr') || cleanName.includes('2299') || cleanName.includes('pipe') || cleanName.includes('tat') || cleanName.includes('4.15') || cleanName.includes('16.15')) {
-    return mulkhDataset;
-  }
-
-  // Match SACHIN TEX specifically
-  if (cleanName.includes('sachin') || cleanName.includes('st/0149') || cleanName.includes('2026-06-09') || cleanName.includes('10.50') || cleanName.includes('tex') || cleanName.includes('lyocell') || cleanName.includes('coimbatore')) {
-    return sachinDataset;
-  }
-
-  // Match JULLUNDUR PIPE FITTING CO.
-  if (cleanName.includes('2026-07-22') || cleanName.includes('11.57') || cleanName.includes('jpf') || cleanName.includes('ravel') || cleanName.includes('jullundur') || cleanName.includes('valve')) {
-    return jullundurDataset;
-  }
-
-  // Default to MULKH RAJ HANS RAJ dataset for new paper invoice photo uploads
-  return mulkhDataset;
 };
 
 module.exports = {
