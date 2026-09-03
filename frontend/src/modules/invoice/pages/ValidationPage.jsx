@@ -431,12 +431,15 @@ export default function ValidationPage() {
 
   const handleDelete = async () => {
     if (!selectedDocument) return;
+    const targetId = selectedDocument.document_id || selectedDocument.id;
+    if (!targetId) return;
+
     if (!window.confirm("Are you sure you want to delete this invoice record?")) return;
     try {
-      await API.delete(`/documents/${selectedDocument.document_id}`);
+      await API.delete(`/documents/${targetId}`);
       showToast("Invoice deleted successfully.");
       setSelectedDocument(null);
-      loadDocuments();
+      await loadDocuments();
     } catch {
       showToast("Failed to delete invoice.", "error");
     }

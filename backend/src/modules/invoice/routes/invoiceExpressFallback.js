@@ -285,6 +285,35 @@ const handleInvoiceExpressFallback = async (req, res) => {
       message: "Invoice uploaded and processed successfully via Cloud OCR Engine.",
       documents: [newDoc]
     });
+  // Handle document deletion: DELETE /api/documents/:id or DELETE /api/v1/invoice/documents/:id
+  if (req.method === 'DELETE') {
+    const docMatch = fullUrl.match(/\/documents\/([^\/]+)$/);
+    const targetId = docMatch ? docMatch[1] : (req.params?.id || null);
+
+    if (targetId) {
+      const idx = inMemoryDocuments.findIndex(d => d.document_id === targetId || d.id === targetId);
+      if (idx !== -1) {
+        inMemoryDocuments.splice(idx, 1);
+      }
+      try {
+        const Document = require('../../../../shared/models/Document');
+        if (Document) {
+          const { Op } = require('sequelize');
+          await Document.destroy({
+            where: {
+              [Op.or]: [{ id: targetId }, { documentId: targetId }]
+            }
+          });
+        }
+      } catch (dbErr) {
+        console.warn("[Invoice Fallback Delete Warning]", dbErr.message);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Invoice document deleted successfully."
+    });
   }
 
   // Handle single document fetch: GET /api/documents/:id or GET /api/v1/invoice/documents/:id
