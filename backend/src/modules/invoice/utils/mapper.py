@@ -1,5 +1,19 @@
 from datetime import datetime
 
+def safe_str(val, default=""):
+    if val is None:
+        return default
+    if isinstance(val, (list, tuple, set)):
+        items = [str(x).strip() for x in val if x is not None and str(x).strip() and str(x).strip().lower() not in ("none", "null", "undefined")]
+        return ", ".join(items) if items else default
+    if isinstance(val, dict):
+        items = [f"{k}: {v}" for k, v in val.items() if v is not None and str(v).strip().lower() not in ("none", "null", "undefined")]
+        return ", ".join(items) if items else default
+    s = str(val).strip()
+    if s.lower() in ("null", "none", "undefined", "nan"):
+        return default
+    return s
+
 def safe_float(val, default=0.0):
     if val is None:
         return default
@@ -27,7 +41,7 @@ class InventoryMapper:
     def extract_pan_from_gstin(gstin):
         if not gstin:
             return ""
-        gstin = str(gstin).strip()
+        gstin = safe_str(gstin)
         if len(gstin) >= 12:
             return gstin[2:12]
         return ""
@@ -35,6 +49,9 @@ class InventoryMapper:
     @staticmethod
     def parse_date(date_string):
         if not date_string:
+            return None
+        date_str = safe_str(date_string)
+        if not date_str:
             return None
         formats = [
             "%d/%m/%Y",
@@ -44,7 +61,7 @@ class InventoryMapper:
         for fmt in formats:
             try:
                 return datetime.strptime(
-                    date_string,
+                    date_str,
                     fmt
                 ).date()
             except Exception:
@@ -104,25 +121,25 @@ class InventoryMapper:
         transport = extraction.get("transport_details", {}) or {}
         tax_summary = extraction.get("tax_summary", {}) or {}
 
-        vendor_name = vendor.get("name", "")
-        vendor_pan = vendor.get("pan", "")
+        vendor_name = safe_str(vendor.get("name", ""))
+        vendor_pan = safe_str(vendor.get("pan", ""))
         if not vendor_pan:
-            vendor_pan = InventoryMapper.extract_pan_from_gstin(vendor.get("gstin"))
+            vendor_pan = safe_str(InventoryMapper.extract_pan_from_gstin(vendor.get("gstin")))
 
-        bill_number = invoice.get("invoice_number", "")
+        bill_number = safe_str(invoice.get("invoice_number", ""))
         bill_date = InventoryMapper.parse_date(invoice.get("invoice_date"))
-        reference_no = invoice.get("po_number", "")
-        payment_terms = invoice.get("payment_terms", "")
+        reference_no = safe_str(invoice.get("po_number", ""))
+        payment_terms = safe_str(invoice.get("payment_terms", ""))
 
         # New metadata extraction
         ocr_res = ocr_result or {}
         ocr_metadata = ocr_res.get("metadata", {}) or {}
 
         bank = extraction.get("bank_details", {}) or {}
-        bank_name = bank.get("bank_name", bank.get("name", ""))
-        bank_branch = bank.get("bank_branch", bank.get("branch", ""))
-        account_number = bank.get("account_number", bank.get("account_no", ""))
-        ifsc_code = bank.get("ifsc_code", bank.get("ifsc", ""))
+        bank_name = safe_str(bank.get("bank_name", bank.get("name", "")))
+        bank_branch = safe_str(bank.get("bank_branch", bank.get("branch", "")))
+        account_number = safe_str(bank.get("account_number", bank.get("account_no", "")))
+        ifsc_code = safe_str(bank.get("ifsc_code", bank.get("ifsc", "")))
 
         notes = extraction.get("notes", []) or ocr_res.get("notes", []) or []
 
@@ -134,30 +151,37 @@ class InventoryMapper:
             validation_errors.append("Missing Invoice Date")
         if not vendor_name:
             validation_errors.append("Missing Vendor Name")
-        if not consumer.get("name"):
+        if not safe_str(consumer.get("name")):
             validation_errors.append("Missing Consumer Name")
         
         items = extraction.get("items", []) or []
         if not items:
             validation_errors.append("No line items")
+            # Create a single summary line item if no individual items present
+            items = [{
+                "description": "Invoice Summary",
+                "quantity": 1,
+                "unit_price": safe_float(tax_summary.get("subtotal") or tax_summary.get("taxable_amount") or tax_summary.get("grand_total")),
+                "total_amount": safe_float(tax_summary.get("grand_total"))
+            }]
 
         validation_passed = 1 if len(validation_errors) == 0 else 0
 
         for item in items:
             tax_percent = InventoryMapper.get_tax_percent(item)
             rate_per_unit = safe_float(item.get("unit_price", 0.0))
-            qty = str(item.get("quantity", ""))
+            qty = safe_str(item.get("quantity", ""))
 
             rows.append({
                 "msid": safe_int(project_data.get("msid", 0)),
-                "group_id": project_data.get("group_id", ""),
-                "scheme_name": project_data.get("scheme_name", "All Scheme"),
-                "doc_name": item.get("description_of_goods", "") or item.get("description", "") or "Item",
-                "specification": item.get("description", ""),
-                "hsn_code": item.get("hsn_code", ""),
-                "req_qty": project_data.get("req_qty", ""),
-                "uom": item.get("unit", ""),
-                "make": item.get("make", ""),
+                "group_id": safe_str(project_data.get("group_id", "")),
+                "scheme_name": safe_str(project_data.get("scheme_name", "All Scheme")),
+                "doc_name": safe_str(item.get("description_of_goods", "") or item.get("description", "") or "Item"),
+                "specification": safe_str(item.get("description", "")),
+                "hsn_code": safe_str(item.get("hsn_code", "")),
+                "req_qty": safe_str(project_data.get("req_qty", "")),
+                "uom": safe_str(item.get("unit", "")),
+                "make": safe_str(item.get("make", "")),
                 "vendor_name": vendor_name,
                 "vendor_pan": vendor_pan,
                 "paid_to": "Company",
@@ -168,41 +192,41 @@ class InventoryMapper:
                 "kyc_type": "GST No.",
                 "reference_no": reference_no,
                 "qty": qty,
-                "location": project_data.get("location", ""),
-                "file_paths": file_path,
+                "location": safe_str(project_data.get("location", "")),
+                "file_paths": safe_str(file_path),
                 "last_tx_date": datetime.utcnow().date(),
                 "status": "In Stock",
                 "forwarded_to_expenses": 0,
-                "added_by": project_data.get("added_by", ""),
+                "added_by": safe_str(project_data.get("added_by", "")),
                 "verification_time": safe_int(project_data.get("verification_time", 0)),
                 
                 # Vendor Details
-                "vendor_gstin": vendor.get("gstin", ""),
-                "vendor_address": vendor.get("address", ""),
-                "vendor_phone": vendor.get("phone", ""),
-                "vendor_email": vendor.get("email", ""),
-                "vendor_state": vendor.get("state", ""),
+                "vendor_gstin": safe_str(vendor.get("gstin", "")),
+                "vendor_address": safe_str(vendor.get("address", "")),
+                "vendor_phone": safe_str(vendor.get("phone", "")),
+                "vendor_email": safe_str(vendor.get("email", "")),
+                "vendor_state": safe_str(vendor.get("state", "")),
 
                 # Consumer Details
-                "consumer_name": consumer.get("name", ""),
-                "consumer_gstin": consumer.get("gstin", ""),
-                "consumer_address": consumer.get("address", ""),
-                "consumer_state": consumer.get("state", ""),
+                "consumer_name": safe_str(consumer.get("name", "")),
+                "consumer_gstin": safe_str(consumer.get("gstin", "")),
+                "consumer_address": safe_str(consumer.get("address", "")),
+                "consumer_state": safe_str(consumer.get("state", "")),
                 
                 # Consignee Details
-                "consignee_name": consignee.get("name", ""),
-                "consignee_address": consignee.get("address", ""),
-                "consignee_state": consignee.get("state", ""),
+                "consignee_name": safe_str(consignee.get("name", "")),
+                "consignee_address": safe_str(consignee.get("address", "")),
+                "consignee_state": safe_str(consignee.get("state", "")),
                 
                 # Invoice Details
                 "invoice_number": bill_number,
                 "invoice_date": bill_date,
-                "place_of_supply": invoice.get("place_of_supply", ""),
+                "place_of_supply": safe_str(invoice.get("place_of_supply", "")),
 
                 # Transport Details
-                "transport_mode": transport.get("mode_of_transport", ""),
-                "destination": transport.get("destination", ""),
-                "vehicle_number": transport.get("vehicle_number", ""),
+                "transport_mode": safe_str(transport.get("mode_of_transport", "")),
+                "destination": safe_str(transport.get("destination", "")),
+                "vehicle_number": safe_str(transport.get("vehicle_number", "")),
                 
                 # Tax Summary
                 "subtotal": safe_float(tax_summary.get("taxable_amount") or tax_summary.get("subtotal")),
@@ -235,7 +259,7 @@ class InventoryMapper:
                 "confidence_score": safe_float(ocr_res.get("confidence") or ocr_res.get("confidence_score")),
                 "processing_time_ms": safe_float(ocr_metadata.get("processing_time_ms")),
                 "inference_time_ms": safe_float(ocr_metadata.get("inference_time_ms")),
-                "model_name": str(ocr_metadata.get("model_name", "")),
+                "model_name": safe_str(ocr_metadata.get("model_name", "")),
                 "lora_loaded": 1 if ocr_metadata.get("lora_loaded") else 0,
 
                 "image_width": safe_int(ocr_metadata.get("image_width")),
