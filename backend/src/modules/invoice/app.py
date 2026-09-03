@@ -46,6 +46,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.on_event("startup")
+def start_background_ocr_worker():
+    # 1. Reset any orphaned PROCESSING documents back to LocalPending on boot
+    try:
+        from database import SessionLocal
+        from models.queue_document import QueueDocument
+        db = SessionLocal()
+        stuck_docs = db.query(QueueDocument).filter(
+            QueueDocument.status.in_(["PROCESSING", "Processing", "UPLOADING"]),
+            QueueDocument.ocr_result.is_(None)
+        ).all()
+        for d in stuck_docs:
+            d.status = "LocalPending"
+        db.commit()
+        db.close()
+        print(f"[Worker Startup] Reset {len(stuck_docs)} stuck processing documents to LocalPending.")
+    except Exception as e:
+        print(f"[Worker Startup Reset Warning]: {e}")
+
+    # 2. Launch persistent background queue worker daemon thread
+    worker_thread = threading.Thread(target=process_queue, daemon=True)
+    worker_thread.start()
+    print("[Worker Startup] Background OCR queue worker thread successfully launched.")
+
 # Custom Dynamic CORS Middleware (Matching Node.js Implementation)
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response

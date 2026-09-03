@@ -75,10 +75,10 @@ def retry_document(document_id: str, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    if doc.status not in ("FAILED", "PENDING_VALIDATION"):
+    if doc.status not in ("FAILED", "PENDING_VALIDATION", "PROCESSING", "LocalPending"):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot retry a document with status '{doc.status}'. Only FAILED or PENDING_VALIDATION documents can be retried."
+            detail=f"Cannot retry a document with status '{doc.status}'."
         )
 
     # Verify we have something to process (file_content in DB or physical file on disk)
@@ -91,8 +91,8 @@ def retry_document(document_id: str, db: Session = Depends(get_db)):
             detail="Cannot retry: original file is no longer available (neither in DB nor on disk)."
         )
 
-    # Reset status to PROCESSING so the queue worker picks it up again
-    doc.status = "PROCESSING"
+    # Reset status to LocalPending so the queue worker picks it up immediately
+    doc.status = "LocalPending"
     doc.error = None
     doc.ocr_result = None
     db.commit()

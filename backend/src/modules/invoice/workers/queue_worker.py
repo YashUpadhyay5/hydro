@@ -10,15 +10,19 @@ def auto_correct_tax_summary(ocr_result):
     return ocr_result
 
 
+active_processing_ids = set()
+
+
 def process_queue():
 
     while True:
 
         db = SessionLocal()
+        current_doc_id = None
 
         try:
 
-            document = QueueService.get_next_pending(db)
+            document = QueueService.get_next_pending(db, exclude_ids=active_processing_ids)
 
             if not document:
 
@@ -29,6 +33,8 @@ def process_queue():
                 continue
 
             document_id = document["document_id"]
+            current_doc_id = document_id
+            active_processing_ids.add(document_id)
 
             QueueService.update_document(
                 db,
@@ -90,7 +96,12 @@ def process_queue():
                     ext_inv = ext_data.get("invoice_details", {}) or {}
                     ext_inv_num = ext_inv.get("invoice_number") or ext_inv.get("bill_number")
                     if ext_inv_num and str(ext_inv_num).strip().upper() == str(invoice_number).strip().upper():
-                        raise Exception(f"Duplicate invoice: Invoice with number '{invoice_number}' already exists in the queue (Document ID: {ext_doc.document_id}).")
+                        warning_msg = f"Duplicate invoice notice: Invoice #{invoice_number} matches existing Document ID {ext_doc.document_id}."
+                        if "validation" not in result:
+                            result["validation"] = {"passed": True, "errors": [], "warnings": []}
+                        result["validation"]["warnings"].append(warning_msg)
+                        print(f"[QueueWorker] {warning_msg}")
+                        break
 
             QueueService.update_document(
                 db,
@@ -122,6 +133,8 @@ def process_queue():
             time.sleep(1)
 
         finally:
+            if current_doc_id:
+                active_processing_ids.discard(current_doc_id)
             db.close()
 
         time.sleep(1)

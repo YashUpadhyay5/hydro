@@ -292,11 +292,15 @@ class QueueService:
 
     @staticmethod
     def get_next_pending(
-        db: Session
+        db: Session,
+        exclude_ids: set = None
     ):
+        query = db.query(QueueDocument)
+        if exclude_ids:
+            query = query.filter(QueueDocument.document_id.notin_(list(exclude_ids)))
 
         # 1. First look for brand new pending uploads
-        db_doc = db.query(QueueDocument).filter(
+        db_doc = query.filter(
             QueueDocument.status.in_(["LocalPending", "Pending", "UPLOADING"])
         ).order_by(
             QueueDocument.created_at.asc()
@@ -304,7 +308,7 @@ class QueueService:
 
         # 2. If none, automatically recover any orphaned "Processing" jobs with null ocr_result
         if not db_doc:
-            db_doc = db.query(QueueDocument).filter(
+            db_doc = query.filter(
                 QueueDocument.status.in_(["Processing", "PROCESSING"]),
                 QueueDocument.ocr_result.is_(None)
             ).order_by(
