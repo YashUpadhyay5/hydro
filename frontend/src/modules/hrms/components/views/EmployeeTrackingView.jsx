@@ -72,38 +72,6 @@ export default function EmployeeTrackingView({ userId, userName, employees = [],
             if (addresses[key]) {
                 return addresses[key];
             }
-
-            // 1. Primary: BigDataCloud Reverse Geocode Client API
-            fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`)
-                .then(res => res.json())
-                .then(data => {
-                    let parts = [];
-                    if (data.locality) parts.push(data.locality);
-                    if (data.city && data.city !== data.locality) parts.push(data.city);
-                    if (data.principalSubdivision) parts.push(data.principalSubdivision);
-                    
-                    const fullAddr = parts.length > 0 ? parts.join(', ') : null;
-                    if (fullAddr) {
-                        setAddresses(prev => ({ ...prev, [key]: fullAddr }));
-                    } else {
-                        throw new Error('BigDataCloud empty');
-                    }
-                })
-                .catch(() => {
-                    // 2. Secondary Fallback: Photon Komoot Reverse Geocoding API
-                    fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}`)
-                        .then(res => res.json())
-                        .then(pData => {
-                            const props = pData?.features?.[0]?.properties;
-                            if (props) {
-                                const pParts = Array.from(new Set([props.name, props.street, props.district, props.city, props.state])).filter(Boolean);
-                                const pAddr = pParts.length > 0 ? pParts.join(', ') : null;
-                                if (pAddr) setAddresses(prev => ({ ...prev, [key]: pAddr }));
-                            }
-                        })
-                        .catch(() => {});
-                });
-
             return `Lat ${lat.toFixed(6)}°, Lng ${lon.toFixed(6)}°`;
         }
 

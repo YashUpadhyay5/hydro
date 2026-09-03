@@ -45,9 +45,15 @@ export default function LiveTrackingView({ employees }) {
             ]);
             
             // Build set of User IDs for employees who are currently actively clocked in today (checkIn present, no checkOut)
+            const isAttActive = (att) => {
+                if (!att || !att.checkIn || att.checkIn === 'null' || att.checkIn === 'undefined') return false;
+                const out = att.checkOut;
+                return !out || out === 'null' || out === 'undefined' || String(out).trim() === '' || String(out).trim() === '-';
+            };
+
             const clockedInUserIds = new Set();
             (todayAttendance || []).forEach(att => {
-                if (att && att.checkIn && (!att.checkOut || String(att.checkOut).trim() === '')) {
+                if (isAttActive(att)) {
                     if (att.userId) clockedInUserIds.add(String(att.userId).trim().toLowerCase());
                     if (att.userName) clockedInUserIds.add(String(att.userName).trim().toLowerCase());
                     if (att.empCode) clockedInUserIds.add(String(att.empCode).trim().toLowerCase());

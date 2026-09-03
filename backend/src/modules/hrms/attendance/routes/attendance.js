@@ -12,6 +12,15 @@ const LEGACY_ALIASES = {
   'mandeep singh': 'HMPL39'
 };
 
+const cleanTimestamp = (val) => {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (s === '' || s === 'null' || s === 'undefined' || s === '-' || s.toLowerCase() === 'null') {
+    return null;
+  }
+  return s;
+};
+
 // Helper to find employee by id, emp_code, or name
 async function findEmployee(identifier, name) {
   if (!identifier && !name) return null;
@@ -100,6 +109,8 @@ router.get('/', async (req, res) => {
       } else {
         plain.empCode = plain.userId;
       }
+      plain.checkIn = cleanTimestamp(plain.checkIn);
+      plain.checkOut = cleanTimestamp(plain.checkOut);
       return plain;
     };
 
@@ -145,6 +156,9 @@ router.post('/', async (req, res) => {
     const activeUserId = emp ? (emp.empCode || emp.emp_code || emp.id) : rawUserId;
     const activeUserName = emp ? emp.name : (userName || 'Employee');
     const possibleUserIds = emp ? [emp.id, emp.empCode, emp.emp_code, rawUserId].filter(Boolean) : [rawUserId].filter(Boolean);
+
+    const cleanCheckIn = cleanTimestamp(checkIn);
+    const cleanCheckOut = cleanTimestamp(checkOut);
     
     // Parse coordinates safely
     let parsedCoords = null;
@@ -167,17 +181,28 @@ router.post('/', async (req, res) => {
         where: {
           userId: { [Op.in]: possibleUserIds },
           date: { [Op.ne]: todayDate },
-          checkOut: null
+          [Op.or]: [
+            { checkOut: null },
+            { checkOut: '' },
+            { checkOut: 'null' },
+            { checkOut: 'undefined' }
+          ]
         }
       }
     ).catch(err => console.warn('[Auto-Close Past Sessions Warning]:', err.message));
 
-    // Check if this is a clock-out update (since checkOut is provided)
-    if (checkOut) {
+    // Check if this is a clock-out update (since valid cleanCheckOut is provided)
+    if (cleanCheckOut) {
       const activeRecord = await Attendance.findOne({
         where: {
           userId: { [Op.in]: possibleUserIds },
-          checkOut: null
+          date: todayDate,
+          [Op.or]: [
+            { checkOut: null },
+            { checkOut: '' },
+            { checkOut: 'null' },
+            { checkOut: 'undefined' }
+          ]
         },
         order: [['createdAt', 'DESC']]
       });
@@ -185,12 +210,33 @@ router.post('/', async (req, res) => {
       if (activeRecord) {
         activeRecord.userId = activeUserId;
         activeRecord.userName = activeUserName;
-        activeRecord.checkOut = checkOut;
-        activeRecord.workingHours = workingHours;
+        activeRecord.checkOut = cleanCheckOut;
+        if (workingHours) activeRecord.workingHours = workingHours;
         if (coords) activeRecord.coords = typeof coords === 'string' ? coords : JSON.stringify(coords);
         await activeRecord.save();
 
+        // Create Clock-Out GPS End Anchor Footprint
         if (latVal != null && lonVal != null) {
+          try {
+            const Footprint = require('../../../../shared/models/Footprint');
+            const clockOutTs = new Date(cleanCheckOut).getTime();
+            await Footprint.create({
+              userId: String(activeUserId),
+              latitude: parseFloat(latVal),
+              longitude: parseFloat(lonVal),
+              timestamp: !isNaN(clockOutTs) ? clockOutTs : Date.now(),
+              date: todayDate,
+              trackingMethod: 'GPS',
+              accuracy: 10,
+              reason: 'CLOCK_OUT_END_ANCHOR',
+              locationEnabled: true,
+              isMockLocation: false
+            });
+            console.log(`[Clock-Out GPS Anchor] Created strict Clock-Out GPS footprint anchor for user ${activeUserId}`);
+          } catch (fpErr) {
+            console.warn("[Clock-Out GPS Anchor Error]:", fpErr.message);
+          }
+
           getAddressFromCoords(parseFloat(latVal), parseFloat(lonVal)).then(async (addr) => {
             if (addr) {
               activeRecord.address = addr;
@@ -199,13 +245,12 @@ router.post('/', async (req, res) => {
           }).catch(err => console.warn(err.message));
         }
 
-        console.log(`[Attendance Clock-Out] Updated active session ${activeRecord.id} to clocked-out.`);
+        console.log(`[Attendance Clock-Out] Successfully updated session ${activeRecord.id} for user ${activeUserId} to clocked-out at ${cleanCheckOut}.`);
         return res.status(200).json(activeRecord);
       }
     }
 
     // Verify clock-in daily limit
-
     const dailyCount = await Attendance.count({
       where: {
         userId: { [Op.in]: possibleUserIds },
@@ -233,7 +278,12 @@ router.post('/', async (req, res) => {
       where: {
         userId: { [Op.in]: possibleUserIds },
         date: todayDate,
-        checkOut: null
+        [Op.or]: [
+          { checkOut: null },
+          { checkOut: '' },
+          { checkOut: 'null' },
+          { checkOut: 'undefined' }
+        ]
       },
       order: [['createdAt', 'DESC']]
     });
@@ -251,8 +301,8 @@ router.post('/', async (req, res) => {
       userId: activeUserId, 
       userName: activeUserName, 
       date: date || todayDate, 
-      checkIn, 
-      checkOut: checkOut || null, 
+      checkIn: cleanCheckIn, 
+      checkOut: cleanCheckOut, 
       workingHours: workingHours || null, 
       coords: coords ? (typeof coords === 'string' ? coords : JSON.stringify(coords)) : null,
       workMode: workMode || 'office',
@@ -263,7 +313,7 @@ router.post('/', async (req, res) => {
       // Create strict Pin #1 Clock-In GPS Start Anchor Footprint
       try {
         const Footprint = require('../../../../shared/models/Footprint');
-        const clockInTs = checkIn ? new Date(checkIn).getTime() : Date.now();
+        const clockInTs = cleanCheckIn ? new Date(cleanCheckIn).getTime() : Date.now();
         const targetDate = date || new Date(clockInTs).toISOString().split('T')[0];
         
         await Footprint.create({

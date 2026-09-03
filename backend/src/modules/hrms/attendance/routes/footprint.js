@@ -163,7 +163,9 @@ router.get('/latest-all', async (req, res) => {
         checkIn: { [Op.ne]: null },
         [Op.or]: [
           { checkOut: null },
-          { checkOut: '' }
+          { checkOut: '' },
+          { checkOut: 'null' },
+          { checkOut: 'undefined' }
         ]
       }
     }).catch(() => []);
@@ -572,7 +574,13 @@ router.post('/batch', async (req, res) => {
         transaction
       });
 
-      if (!attRecord || !attRecord.checkIn || (attRecord.checkOut && attRecord.checkOut.trim() !== '')) {
+      const isTrueCheckOut = attRecord && attRecord.checkOut && 
+        attRecord.checkOut !== 'null' && 
+        attRecord.checkOut !== 'undefined' && 
+        String(attRecord.checkOut).trim() !== '' && 
+        String(attRecord.checkOut).trim() !== '-';
+
+      if (!attRecord || !attRecord.checkIn || isTrueCheckOut) {
         recordsSkipped++;
         console.warn(`[FOOTPRINT PER-RECORD LOG] UUID: ${recordUuid} | UserId: ${userId} | Timestamp: ${validTimestamp} | Insert: SKIPPED | Reason: Employee is not actively clocked in today.`);
         continue;

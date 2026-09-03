@@ -18,6 +18,21 @@ const getEmpId = (emp, idx) => {
     return `${prefix}${String((idx || 0) + 1).padStart(2, '0')}`;
 };
 
+const cleanCheckOutVal = (val) => {
+    if (!val) return null;
+    const s = String(val).trim();
+    if (s === '' || s === 'null' || s === 'undefined' || s === '-' || s.toLowerCase() === 'null') {
+        return null;
+    }
+    return s;
+};
+
+const isSessionActive = (r) => {
+    if (!r || !r.checkIn || r.checkIn === 'null' || r.checkIn === 'undefined') return false;
+    const out = cleanCheckOutVal(r.checkOut);
+    return !out;
+};
+
 const groupAttendanceRecords = (records, footprintsList = [], employeesList = []) => {
     const grouped = {};
 
@@ -160,7 +175,7 @@ const groupAttendanceRecords = (records, footprintsList = [], employeesList = []
             }
 
             // Ensure main summary Check-Out is strictly the LAST (latest) Clock-Out of the day
-            const lastPunchWithOut = cleanPunches.slice().reverse().find(p => p.checkOut);
+            const lastPunchWithOut = cleanPunches.slice().reverse().find(p => cleanCheckOutVal(p.checkOut));
             if (lastPunchWithOut && lastPunchWithOut.checkOut) {
                 const mainInTs = parseToTimestamp(item.checkIn);
                 const mainOutTs = parseToTimestamp(lastPunchWithOut.checkOut);
@@ -176,7 +191,7 @@ const groupAttendanceRecords = (records, footprintsList = [], employeesList = []
             const isTodayRecord = isTodayStr(item.date);
             const lastPunch = item.punches[item.punches.length - 1];
             
-            if (isTodayRecord && lastPunch && !lastPunch.checkOut) {
+            if (isTodayRecord && lastPunch && !cleanCheckOutVal(lastPunch.checkOut)) {
                 item.checkOut = null;
             } else if (!isTodayRecord && !item.checkOut) {
                 // Past date record with no explicit checkOut logged:
