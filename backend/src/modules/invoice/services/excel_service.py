@@ -137,10 +137,21 @@ class ExcelService:
                 price_num = parse_numeric(raw_price)
 
                 # 2. Compute Item Subtotal
-                if qty_num > 0 and price_num > 0:
+                extracted_item_subtotal = safe_float(item.get("taxable_amount"))
+                extracted_item_total = safe_float(item.get("total_amount") or item.get("amount"))
+
+                # OCR trailing zero correction (e.g. 2400.000 NOS -> 2400000.0 vs taxable 235200 with unit price 98)
+                if qty_num > 0 and price_num > 0 and extracted_item_subtotal > 0:
+                    computed_raw = qty_num * price_num
+                    if abs(computed_raw - extracted_item_subtotal * 1000) < 1.0:
+                        qty_num = round(qty_num / 1000.0, 3)
+
+                if extracted_item_subtotal > 0:
+                    item_subtotal = extracted_item_subtotal
+                elif qty_num > 0 and price_num > 0:
                     item_subtotal = round(qty_num * price_num, 2)
                 else:
-                    item_subtotal = safe_float(item.get("taxable_amount") or item.get("total_amount", 0.0))
+                    item_subtotal = safe_float(item.get("total_amount", 0.0))
 
                 # 3. Compute Item GST (CGST, SGST, IGST)
                 if "cgst_amount" in item or "sgst_amount" in item or "igst_amount" in item:
@@ -164,7 +175,12 @@ class ExcelService:
                         item_igst = 0.0
 
                 item_total_tax = round(item_cgst + item_sgst + item_igst, 2)
-                item_total = round(item_subtotal + item_total_tax, 2) if item_subtotal > 0 else safe_float(item.get("total_amount", 0.0))
+                if extracted_item_total > 0:
+                    item_total = extracted_item_total
+                elif item_subtotal > 0:
+                    item_total = round(item_subtotal + item_total_tax, 2)
+                else:
+                    item_total = 0.0
 
                 # 4. Construct Row dictionary
                 row_dict = {}
@@ -215,13 +231,34 @@ class ExcelService:
                 total_value += item_total
                 total_records_count += 1
 
+        total_taxable_subtotal = 0.0
+        total_cgst_sum = 0.0
+        total_sgst_sum = 0.0
+        total_igst_sum = 0.0
+        total_cess_sum = 0.0
+        total_grand_total_sum = 0.0
+
         for doc in docs:
             ext = doc.final_extraction or (doc.ocr_result.get("extraction") if doc.ocr_result else {}) or {}
             tax_sum = ext.get("tax_summary", {}) or {}
+            subtotal = safe_float(tax_sum.get("subtotal") or tax_sum.get("taxable_amount"))
             cgst = safe_float(tax_sum.get("cgst") or tax_sum.get("cgst_amount"))
             sgst = safe_float(tax_sum.get("sgst") or tax_sum.get("sgst_amount"))
             igst = safe_float(tax_sum.get("igst") or tax_sum.get("igst_amount"))
-            total_tax += (cgst + sgst + igst)
+            cess = safe_float(tax_sum.get("cess") or tax_sum.get("cess_amount"))
+            gt = safe_float(tax_sum.get("grand_total") or tax_sum.get("calculated_grand_total"))
+
+            if gt == 0.0 and subtotal > 0:
+                gt = subtotal + cgst + sgst + igst + cess
+
+            total_taxable_subtotal += subtotal
+            total_cgst_sum += cgst
+            total_sgst_sum += sgst
+            total_igst_sum += igst
+            total_cess_sum += cess
+            total_grand_total_sum += gt
+
+        total_tax_sum = total_cgst_sum + total_sgst_sum + total_igst_sum + total_cess_sum
 
         export_path = os.path.join(
             Config.EXPORT_DIR,
@@ -267,15 +304,35 @@ class ExcelService:
                 },
                 {
                     "Metric": "Total Quantity",
-                    "Value": total_qty
+                    "Value": round(total_qty, 2)
+                },
+                {
+                    "Metric": "Total Taxable Amount (Subtotal)",
+                    "Value": round(total_taxable_subtotal, 2)
+                },
+                {
+                    "Metric": "Total CGST",
+                    "Value": round(total_cgst_sum, 2)
+                },
+                {
+                    "Metric": "Total SGST",
+                    "Value": round(total_sgst_sum, 2)
+                },
+                {
+                    "Metric": "Total IGST",
+                    "Value": round(total_igst_sum, 2)
+                },
+                {
+                    "Metric": "Total Cess",
+                    "Value": round(total_cess_sum, 2)
                 },
                 {
                     "Metric": "Total Tax Amount",
-                    "Value": total_tax
+                    "Value": round(total_tax_sum, 2)
                 },
                 {
-                    "Metric": "Total Inventory Value",
-                    "Value": total_value
+                    "Metric": "Total Grand Total",
+                    "Value": round(total_grand_total_sum, 2)
                 }
             ])
 
@@ -284,5 +341,9 @@ class ExcelService:
                 sheet_name="Summary",
                 index=False
             )
+
+            summary_ws = writer.sheets["Summary"]
+            summary_ws.set_column(0, 0, 35)
+            summary_ws.set_column(1, 1, 20)
 
         return export_path

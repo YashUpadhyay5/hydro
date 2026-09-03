@@ -306,11 +306,10 @@ class QueueService:
             QueueDocument.created_at.asc()
         ).first()
 
-        # 2. If none, automatically recover any orphaned "Processing" jobs with null ocr_result
+        # 2. If none, automatically recover any orphaned "Processing" jobs
         if not db_doc:
             db_doc = query.filter(
-                QueueDocument.status.in_(["Processing", "PROCESSING"]),
-                QueueDocument.ocr_result.is_(None)
+                QueueDocument.status.in_(["Processing", "PROCESSING"])
             ).order_by(
                 QueueDocument.created_at.asc()
             ).first()
