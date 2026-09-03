@@ -136,14 +136,21 @@ class HeartbeatMonitorService {
         }
     }
 
+    // In-memory set to prevent redundant admin escalation alerts and unbounded audit growth
+    static _adminAlertSentSessions = new Set();
+    static _isRunning = false;
+
     // Phase 5: Periodically Scan Active Sessions (run every 60s)
     static async runBackgroundCheck() {
+        if (this._isRunning) {
+            return;
+        }
+        this._isRunning = true;
         const now = Date.now();
-        console.log(`[HeartbeatService] Executing background checks for active attendance tracking at: ${new Date().toISOString()}`);
         
         try {
             const config = await this.getConfig();
-            const today = new Date().toISOString().split('T')[0];
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 
             // Find all active attendance sessions strictly for today
             const activeSessions = await Attendance.findAll({
@@ -160,7 +167,7 @@ class HeartbeatMonitorService {
 
                 // Check if heartbeat interval exceeded
                 if (secondsElapsed >= config.heartbeatInterval) {
-                    session.missedHeartbeatCount += 1;
+                    session.missedHeartbeatCount = (session.missedHeartbeatCount || 0) + 1;
                     
                     const oldStatus = session.trackingStatus;
                     let newStatus = oldStatus;
@@ -201,6 +208,8 @@ class HeartbeatMonitorService {
             }
         } catch (err) {
             console.error('[HeartbeatService] Background monitoring loop failed:', err.message);
+        } finally {
+            this._isRunning = false;
         }
     }
 
@@ -215,12 +224,13 @@ class HeartbeatMonitorService {
             return;
         }
 
+        const sessionKey = `${session.id}_${session.userId}`;
+
         if (session.notificationCount >= config.maximumNotifications) {
             // Threshold exceeded: Escalate to administrator only once per session
-            if (config.enableAdminAlert && !session.adminAlertSent) {
+            if (config.enableAdminAlert && !this._adminAlertSentSessions.has(sessionKey)) {
+                this._adminAlertSentSessions.add(sessionKey);
                 console.warn(`[Escalation Alert] User ${session.userId} has exceeded maximum recovery attempts (${session.notificationCount}). Notifying Administrator.`);
-                session.adminAlertSent = true;
-                await session.save().catch(() => {});
                 await AuditLog.create({
                     employeeId: session.userId,
                     attendanceSessionId: session.id,
