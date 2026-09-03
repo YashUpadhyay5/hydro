@@ -443,6 +443,9 @@ REQUESTED_SCHEMA:
             if Config.RUNPOD_API_KEY:
                 headers["Authorization"] = f"Bearer {Config.RUNPOD_API_KEY}"
 
+            if file_bytes and file_bytes.startswith(b"%PDF") and not filename.lower().endswith(".pdf"):
+                filename = f"{filename}.pdf"
+
             if Config.OCR_API_URL and "api.runpod.ai" in Config.OCR_API_URL:
                 base64_data = base64.b64encode(file_bytes).decode("utf-8")
                 result = OCRService._call_runpod_serverless(Config.OCR_API_URL, base64_data, filename, headers, template_config=template_config)

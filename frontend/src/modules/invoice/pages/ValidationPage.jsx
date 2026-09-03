@@ -400,8 +400,12 @@ export default function ValidationPage() {
   const handleSave = async () => {
     if (!selectedDocument || !editableExtraction) return;
     setIsSaving(true);
+    const savedDocId = selectedDocument.document_id;
+    const currentList = getFilteredDocuments();
+    const currentIndex = currentList.findIndex(d => d.document_id === savedDocId);
+
     const payload = {
-      document_id: selectedDocument.document_id,
+      document_id: savedDocId,
       extraction: editableExtraction,
       msid: dbFields.msid ? parseInt(dbFields.msid) || 1001 : 1001,
       scheme_name: dbFields.scheme_name || "All Scheme",
@@ -418,9 +422,38 @@ export default function ValidationPage() {
       await loadDocuments();
       const res = await API.get("/documents");
       const updatedDocs = res.data || [];
-      const nextPending = updatedDocs.find(d => d.status === "PENDING_VALIDATION" && d.document_id !== selectedDocument.document_id);
-      if (nextPending) fetchFullDocumentDetails(nextPending.document_id);
-      else setSelectedDocument(null);
+
+      // 1. First search for next pending document after currentIndex in current view
+      let nextDoc = null;
+      if (currentIndex !== -1 && currentList.length > 0) {
+        for (let i = currentIndex + 1; i < currentList.length; i++) {
+          const cand = updatedDocs.find(d => d.document_id === currentList[i].document_id);
+          if (cand && cand.status === "PENDING_VALIDATION" && cand.document_id !== savedDocId) {
+            nextDoc = cand;
+            break;
+          }
+        }
+        if (!nextDoc) {
+          for (let i = 0; i < currentIndex; i++) {
+            const cand = updatedDocs.find(d => d.document_id === currentList[i].document_id);
+            if (cand && cand.status === "PENDING_VALIDATION" && cand.document_id !== savedDocId) {
+              nextDoc = cand;
+              break;
+            }
+          }
+        }
+      }
+
+      // 2. Fallback: find any other pending validation document in entire list
+      if (!nextDoc) {
+        nextDoc = updatedDocs.find(d => d.status === "PENDING_VALIDATION" && d.document_id !== savedDocId);
+      }
+
+      if (nextDoc) {
+        fetchFullDocumentDetails(nextDoc.document_id);
+      } else {
+        setSelectedDocument(null);
+      }
     } catch (error) {
       const errMsg = error.response?.data?.detail || "Save failed. Please check details.";
       showToast(errMsg, "error");

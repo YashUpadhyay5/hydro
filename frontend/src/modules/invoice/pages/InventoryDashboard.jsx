@@ -382,13 +382,35 @@ function InventoryDashboard() {
       const updatedDocs = response.data || [];
       setDocuments(updatedDocs);
 
-      // Find the next pending validation document
-      const nextPending = updatedDocs.find(
-        (d) => d.status === "PENDING_VALIDATION" && d.document_id !== selectedDocument.document_id
-      );
+      const savedDocId = selectedDocument.document_id;
+      const currentIndex = documents.findIndex((d) => d.document_id === savedDocId);
+      let nextDoc = null;
 
-      if (nextPending) {
-        fetchFullDocumentDetails(nextPending.document_id);
+      if (currentIndex !== -1 && documents.length > 0) {
+        for (let i = currentIndex + 1; i < documents.length; i++) {
+          const cand = updatedDocs.find((d) => d.document_id === documents[i].document_id);
+          if (cand && cand.status === "PENDING_VALIDATION" && cand.document_id !== savedDocId) {
+            nextDoc = cand;
+            break;
+          }
+        }
+        if (!nextDoc) {
+          for (let i = 0; i < currentIndex; i++) {
+            const cand = updatedDocs.find((d) => d.document_id === documents[i].document_id);
+            if (cand && cand.status === "PENDING_VALIDATION" && cand.document_id !== savedDocId) {
+              nextDoc = cand;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!nextDoc) {
+        nextDoc = updatedDocs.find((d) => d.status === "PENDING_VALIDATION" && d.document_id !== savedDocId);
+      }
+
+      if (nextDoc) {
+        fetchFullDocumentDetails(nextDoc.document_id);
       } else {
         setSelectedDocument(null);
       }
