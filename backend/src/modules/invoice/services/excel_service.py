@@ -68,15 +68,6 @@ class ExcelService:
                         f_key = field["key"]
                         col_label = f"Item - {field['label']}"
                         columns_mapping.append((sec_id, f_key, col_label, field.get("type", "Text")))
-                        
-                        # Inject row-level computed columns right after unit_price
-                        if f_key == "unit_price":
-                            columns_mapping.append((sec_id, "computed_subtotal", "Item - Subtotal (Qty × Rate)", "Currency"))
-                            columns_mapping.append((sec_id, "computed_cgst", "Item - CGST", "Currency"))
-                            columns_mapping.append((sec_id, "computed_sgst", "Item - SGST", "Currency"))
-                            columns_mapping.append((sec_id, "computed_igst", "Item - IGST", "Currency"))
-                            columns_mapping.append((sec_id, "computed_total_tax", "Item - Total Tax", "Currency"))
-                            has_custom_item_cols = True
             else:
                 for field in sec.get("fields", []):
                     if not field.get("hidden", False):
@@ -110,7 +101,14 @@ class ExcelService:
             inv_cgst = safe_float(tax_sum.get("cgst") or tax_sum.get("cgst_amount"))
             inv_sgst = safe_float(tax_sum.get("sgst") or tax_sum.get("sgst_amount"))
             inv_igst = safe_float(tax_sum.get("igst") or tax_sum.get("igst_amount"))
+            inv_cess = safe_float(tax_sum.get("cess") or tax_sum.get("cess_amount"))
             inv_grand_total = safe_float(tax_sum.get("grand_total") or tax_sum.get("calculated_grand_total"))
+
+            if inv_grand_total == 0.0 and inv_subtotal > 0:
+                inv_grand_total = inv_subtotal + inv_cgst + inv_sgst + inv_igst + inv_cess
+
+            total_value += inv_grand_total
+            total_tax += (inv_cgst + inv_sgst + inv_igst + inv_cess)
 
             # Track unique vendors
             vendor_details = ext.get("vendor_details", {}) or {}
@@ -130,15 +128,12 @@ class ExcelService:
                     item = {}
                 is_last_item = (item_idx == total_items_in_doc - 1)
 
-                # 1. Parse quantity and price
+                # 1. Parse quantity
                 raw_qty = item.get("quantity", "")
                 raw_price = item.get("unit_price", "")
                 qty_num = parse_numeric(raw_qty)
                 price_num = parse_numeric(raw_price)
-
-                # 2. Compute Item Subtotal
                 extracted_item_subtotal = safe_float(item.get("taxable_amount"))
-                extracted_item_total = safe_float(item.get("total_amount") or item.get("amount"))
 
                 # OCR trailing zero correction (e.g. 2400.000 NOS -> 2400000.0 vs taxable 235200 with unit price 98)
                 if qty_num > 0 and price_num > 0 and extracted_item_subtotal > 0:
@@ -146,62 +141,11 @@ class ExcelService:
                     if abs(computed_raw - extracted_item_subtotal * 1000) < 1.0:
                         qty_num = round(qty_num / 1000.0, 3)
 
-                if extracted_item_subtotal > 0:
-                    item_subtotal = extracted_item_subtotal
-                elif qty_num > 0 and price_num > 0:
-                    item_subtotal = round(qty_num * price_num, 2)
-                else:
-                    item_subtotal = safe_float(item.get("total_amount", 0.0))
-
-                # 3. Compute Item GST (CGST, SGST, IGST)
-                if "cgst_amount" in item or "sgst_amount" in item or "igst_amount" in item:
-                    item_cgst = safe_float(item.get("cgst_amount"))
-                    item_sgst = safe_float(item.get("sgst_amount"))
-                    item_igst = safe_float(item.get("igst_amount"))
-                else:
-                    raw_item_tax = safe_float(item.get("tax_amount"))
-                    if raw_item_tax == 0.0 and "tax_rate" in item:
-                        item_rate = parse_numeric(item.get("tax_rate"))
-                        if item_rate > 0:
-                            raw_item_tax = round(item_subtotal * (item_rate / 100.0), 2)
-                    
-                    if inv_igst > 0:
-                        item_cgst = 0.0
-                        item_sgst = 0.0
-                        item_igst = raw_item_tax
-                    else:
-                        item_cgst = round(raw_item_tax / 2.0, 2)
-                        item_sgst = round(raw_item_tax / 2.0, 2)
-                        item_igst = 0.0
-
-                item_total_tax = round(item_cgst + item_sgst + item_igst, 2)
-                if extracted_item_total > 0:
-                    item_total = extracted_item_total
-                elif item_subtotal > 0:
-                    item_total = round(item_subtotal + item_total_tax, 2)
-                else:
-                    item_total = 0.0
-
-                # 4. Construct Row dictionary
+                # 2. Construct Row dictionary
                 row_dict = {}
                 for sec_id, f_key, col_header, f_type in columns_mapping:
                     if sec_id in ["item_details", "items"]:
-                        if f_key == "computed_subtotal" or f_key == "subtotal":
-                            val = item_subtotal
-                        elif f_key == "computed_cgst" or f_key == "cgst":
-                            val = item_cgst
-                        elif f_key == "computed_sgst" or f_key == "sgst":
-                            val = item_sgst
-                        elif f_key == "computed_igst" or f_key == "igst":
-                            val = item_igst
-                        elif f_key == "computed_total_tax" or f_key == "tax_amount":
-                            val = item_total_tax
-                        elif f_key == "total_amount":
-                            val = item_total
-                        elif f_key == "taxable_amount":
-                            val = item_subtotal
-                        else:
-                            val = item.get(f_key, "")
+                        val = item.get(f_key, "")
                     elif sec_id in ["tax_summary", "tax_details"]:
                         # Invoice level totals are ONLY shown on the last row of the invoice
                         if is_last_item:
@@ -214,6 +158,8 @@ class ExcelService:
                                 val = inv_sgst
                             elif f_key == "igst":
                                 val = inv_igst
+                            elif f_key == "cess":
+                                val = inv_cess
                             elif f_key == "grand_total":
                                 val = inv_grand_total
                             else:
@@ -228,37 +174,7 @@ class ExcelService:
                 
                 rows.append(row_dict)
                 total_qty += qty_num
-                total_value += item_total
                 total_records_count += 1
-
-        total_taxable_subtotal = 0.0
-        total_cgst_sum = 0.0
-        total_sgst_sum = 0.0
-        total_igst_sum = 0.0
-        total_cess_sum = 0.0
-        total_grand_total_sum = 0.0
-
-        for doc in docs:
-            ext = doc.final_extraction or (doc.ocr_result.get("extraction") if doc.ocr_result else {}) or {}
-            tax_sum = ext.get("tax_summary", {}) or {}
-            subtotal = safe_float(tax_sum.get("subtotal") or tax_sum.get("taxable_amount"))
-            cgst = safe_float(tax_sum.get("cgst") or tax_sum.get("cgst_amount"))
-            sgst = safe_float(tax_sum.get("sgst") or tax_sum.get("sgst_amount"))
-            igst = safe_float(tax_sum.get("igst") or tax_sum.get("igst_amount"))
-            cess = safe_float(tax_sum.get("cess") or tax_sum.get("cess_amount"))
-            gt = safe_float(tax_sum.get("grand_total") or tax_sum.get("calculated_grand_total"))
-
-            if gt == 0.0 and subtotal > 0:
-                gt = subtotal + cgst + sgst + igst + cess
-
-            total_taxable_subtotal += subtotal
-            total_cgst_sum += cgst
-            total_sgst_sum += sgst
-            total_igst_sum += igst
-            total_cess_sum += cess
-            total_grand_total_sum += gt
-
-        total_tax_sum = total_cgst_sum + total_sgst_sum + total_igst_sum + total_cess_sum
 
         export_path = os.path.join(
             Config.EXPORT_DIR,
@@ -307,32 +223,12 @@ class ExcelService:
                     "Value": round(total_qty, 2)
                 },
                 {
-                    "Metric": "Total Taxable Amount (Subtotal)",
-                    "Value": round(total_taxable_subtotal, 2)
-                },
-                {
-                    "Metric": "Total CGST",
-                    "Value": round(total_cgst_sum, 2)
-                },
-                {
-                    "Metric": "Total SGST",
-                    "Value": round(total_sgst_sum, 2)
-                },
-                {
-                    "Metric": "Total IGST",
-                    "Value": round(total_igst_sum, 2)
-                },
-                {
-                    "Metric": "Total Cess",
-                    "Value": round(total_cess_sum, 2)
-                },
-                {
                     "Metric": "Total Tax Amount",
-                    "Value": round(total_tax_sum, 2)
+                    "Value": round(total_tax, 2)
                 },
                 {
-                    "Metric": "Total Grand Total",
-                    "Value": round(total_grand_total_sum, 2)
+                    "Metric": "Total Inventory Value",
+                    "Value": round(total_value, 2)
                 }
             ])
 
@@ -343,7 +239,7 @@ class ExcelService:
             )
 
             summary_ws = writer.sheets["Summary"]
-            summary_ws.set_column(0, 0, 35)
+            summary_ws.set_column(0, 0, 30)
             summary_ws.set_column(1, 1, 20)
 
         return export_path
