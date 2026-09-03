@@ -44,7 +44,8 @@ server.on('error', (err) => {
 });
 
 // Initialize Socket.IO Gateway
-initSocketGateway(server);
+const io = initSocketGateway(server);
+app.set('io', io);
 
 const startServer = async () => {
   try {

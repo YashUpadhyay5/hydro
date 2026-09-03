@@ -271,6 +271,23 @@ router.post('/', async (req, res) => {
         }
 
         console.log(`[Attendance Clock-Out] Successfully updated session ${activeRecord.id} for user ${activeUserId} to clocked-out at ${cleanCheckOut}.`);
+
+        const io = req.app ? req.app.get('io') : null;
+        if (io) {
+          try {
+            io.emit('ATTENDANCE_PUNCH', {
+              action: 'CLOCK_OUT',
+              userId: activeUserId,
+              userName: activeUserName,
+              record: activeRecord,
+              timestamp: Date.now()
+            });
+            io.emit('ATTENDANCE_UPDATE', { date: todayDate });
+          } catch (sockErr) {
+            console.warn('[Socket Broadcast Warning]:', sockErr.message);
+          }
+        }
+
         return res.status(200).json(activeRecord);
       }
     }
@@ -348,6 +365,22 @@ router.post('/', async (req, res) => {
       }).catch(err => {
         console.warn("[Attendance Geocode Error] Failed to resolve address:", err.message);
       });
+    }
+
+    const io = req.app ? req.app.get('io') : null;
+    if (io) {
+      try {
+        io.emit('ATTENDANCE_PUNCH', {
+          action: 'CLOCK_IN',
+          userId: activeUserId,
+          userName: activeUserName,
+          record: newRecord,
+          timestamp: Date.now()
+        });
+        io.emit('ATTENDANCE_UPDATE', { date: todayDate });
+      } catch (sockErr) {
+        console.warn('[Socket Broadcast Warning]:', sockErr.message);
+      }
     }
 
     return res.status(201).json(newRecord);

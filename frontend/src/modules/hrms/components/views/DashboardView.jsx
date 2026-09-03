@@ -436,12 +436,26 @@ export default function DashboardView({ totalEmployees, onViewChange }) {
         fetchAnnouncements();
         loadHolidays();
 
-        // Real-time background auto-refresh every 15 seconds
+        // Real-time high-speed background auto-refresh every 5 seconds (zero-cache)
         const intervalId = setInterval(() => {
             fetchDashboardData();
-        }, 15000);
+        }, 5000);
 
-        return () => clearInterval(intervalId);
+        // Immediate refresh when admin tab gains focus or visibility
+        const handleFocus = () => {
+            if (document.visibilityState === 'visible') {
+                fetchDashboardData();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleFocus);
+
+        return () => {
+            clearInterval(intervalId);
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleFocus);
+        };
     }, []);
 
     const handleCreateAnnouncement = async (e) => {

@@ -165,7 +165,7 @@ const cache = apicache.middleware('1 minute', (req, res) => {
 const registerRoutes = (prefix) => {
     app.use(`${prefix}/auth`, authRoutes);
     app.use(`${prefix}/expenses`, verifyToken, expenseRoutes);
-    app.use(`${prefix}/attendance`, verifyToken, cache, attendanceRoutes);
+    app.use(`${prefix}/attendance`, verifyToken, attendanceRoutes);
     app.use(`${prefix}/footprints`, verifyToken, footprintRoutes);
     app.use(`${prefix}/footprint`, verifyToken, footprintRoutes);
     app.use(`${prefix}/media`, verifyToken, cache, mediaRoutes);
