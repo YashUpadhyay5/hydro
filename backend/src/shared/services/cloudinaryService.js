@@ -9,6 +9,7 @@ const https = require('https');
 // Cloudinary Credentials
 const DEFAULT_API_KEY = '722278119843564';
 const DEFAULT_API_SECRET = 'xYbymFj0XCp4Bw23k4F1_OinWJc';
+const DEFAULT_CLOUD_NAME = 'duvsrhi4x';
 
 /**
  * Uploads a file buffer or base64 string to Cloudinary API over HTTPS using signed SHA-1 HMAC authentication.
@@ -26,7 +27,7 @@ const uploadToCloudinary = (fileBuffer, mimeType = 'application/pdf', originalNa
 
       const apiKey = process.env.CLOUDINARY_API_KEY || DEFAULT_API_KEY;
       const apiSecret = process.env.CLOUDINARY_API_SECRET || DEFAULT_API_SECRET;
-      const cloudName = process.env.CLOUDINARY_CLOUD_NAME || '';
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME || DEFAULT_CLOUD_NAME;
 
       // Convert buffer to Base64 Data URI if buffer is passed
       const base64Data = Buffer.isBuffer(fileBuffer)
