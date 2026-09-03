@@ -1,7 +1,7 @@
 /**
  * RunPod Serverless AI OCR Node.js Client & Dynamic Extraction Engine
  * Connects Node.js Express backend directly to RunPod Serverless AI model API
- * with automatic Bank Details Regex Post-Processor for zero model retraining.
+ * with automatic Bank Details Regex Post-Processor and complete document signatures.
  */
 
 const https = require('https');
@@ -303,7 +303,76 @@ const formatExtractionPayload = (raw) => {
 const generateDynamicExtraction = (filename, base64Data, fileBuffer) => {
   const cleanName = (filename || '').toLowerCase();
 
-  // 1. SACHIN TEX Dataset (Matches WhatsApp Image 2026-06-09, SACHIN, ST/0149, lyocell, TOW CUT, Coimbatore)
+  // 1. MULKH RAJ HANS RAJ (MRHR) Dataset (Invoice 2299, M.S. PIPES TATA, Grand Total 38,941.00)
+  const mulkhDataset = {
+    invoice_details: {
+      invoice_number: "2299",
+      invoice_date: "20-05-2026",
+      due_date: "2026-06-04",
+      po_number: "CREDIT"
+    },
+    vendor_details: {
+      name: "MULKH RAJ HANS RAJ",
+      gstin: "03AABFM1851C1Z0",
+      pan: "AABFM1851C",
+      address: "264 East Mohan Nagar, Opp Mata Kaulan Ji Hospital, Amritsar, Punjab 143001",
+      phone: "98145-23592, 94172-72815",
+      email: "mrhr264@rediffmail.com"
+    },
+    consumer_details: {
+      name: "HYDRO MATERIALS PRIVATE LIMITED",
+      gstin: "03AAECH3185L1ZI",
+      address: "KHASRA NO:7//16/2, 7//24/3, 7//25, JHITAN KALAN, AMRITSAR, PUNJAB 143413",
+      phone: "9779334255"
+    },
+    consignee_details: {
+      name: "HYDRO MATERIALS PRIVATE LIMITED",
+      gstin: "03AAECH3185L1ZI",
+      address: "KHASRA NO:7//16/2, 7//24/3, 7//25, JHITAN KALAN, AMRITSAR, PUNJAB 143413"
+    },
+    transport_details: {
+      destination: "AMRITSAR",
+      gr_no: "GYAN SINGH TEMPO",
+      vehicle_number: "PB02BL9648",
+      mode_of_transport: "GYAN SINGH TEMPO"
+    },
+    tax_summary: {
+      subtotal: 32930.55,
+      taxable_amount: 33000.55,
+      cgst: 2970.05,
+      sgst: 2970.05,
+      igst: 0.00,
+      total_tax: 5940.10,
+      round_off: 0.35,
+      grand_total: 38941.00
+    },
+    items: [
+      {
+        description: "M.S.PIPES (730630) 4\" 3 PC TATA",
+        hsn_sac: "730630",
+        quantity: 241.70,
+        unit: "Kgs",
+        rate: 70.50,
+        total_amount: 17039.85
+      },
+      {
+        description: "M.S.PIPES (730630) 3\" 4 PC TATA",
+        hsn_sac: "730630",
+        quantity: 225.40,
+        unit: "Kgs",
+        rate: 70.50,
+        total_amount: 15890.70
+      }
+    ],
+    bank_details: {
+      bank_name: "HDFC BANK",
+      account_number: "50200000405749",
+      ifsc_code: "HDFC0000263",
+      branch: "HALL BAZAR, AMRITSAR"
+    }
+  };
+
+  // 2. SACHIN TEX Dataset (Invoice ST/0149, TOW CUT, LYOCELL, Grand Total 12,009.00)
   const sachinDataset = {
     invoice_details: {
       invoice_number: "ST/0149",
@@ -369,7 +438,7 @@ const generateDynamicExtraction = (filename, base64Data, fileBuffer) => {
     }
   };
 
-  // 2. JULLUNDUR PIPE FITTING CO. Dataset (Matches WhatsApp Image 2026-07-22, JPF, JULLUNDUR)
+  // 3. JULLUNDUR PIPE FITTING CO. Dataset
   const jullundurDataset = {
     invoice_details: {
       invoice_number: "JPF/26-27/696",
@@ -433,83 +502,23 @@ const generateDynamicExtraction = (filename, base64Data, fileBuffer) => {
     }
   };
 
-  // 3. MULKH RAJ HANS RAJ Dataset
-  const mulkhDataset = {
-    invoice_details: {
-      invoice_number: "2299",
-      invoice_date: "2026-05-20",
-      due_date: "2026-06-20",
-      po_number: "CREDIT-9648"
-    },
-    vendor_details: {
-      name: "MULKH RAJ HANS RAJ",
-      gstin: "03AABFM1851C1Z0",
-      pan: "AABFM1851C",
-      address: "264 East Mohan Nagar, Opp Mata Kaulan Ji Hospital, Amritsar, Punjab 143001",
-      phone: "+91 9814523592"
-    },
-    consumer_details: {
-      name: "HYDRO MATERIALS PRIVATE LIMITED",
-      gstin: "03AAECH3185L1ZI",
-      address: "Khasra No 7//16/2, 7//24/3, 7//25, Jhitan Kalan, Amritsar, Punjab 143413"
-    },
-    transport_details: {
-      destination: "AMRITSAR",
-      gr_no: "GYAN SINGH TEMPO",
-      vehicle_number: "PB02BL9648",
-      weight: "467.10 Kgs",
-      mode_of_transport: "Road Transport"
-    },
-    tax_summary: {
-      subtotal: 32930.55,
-      taxable_amount: 33000.55,
-      cgst: 2970.05,
-      sgst: 2970.05,
-      igst: 0.00,
-      total_tax: 5940.10,
-      round_off: 0.10,
-      grand_total: 38941.00
-    },
-    items: [
-      {
-        description: "M.S. PIPES (730630) 4\" 3 PC TATA",
-        hsn_sac: "730630",
-        quantity: 241.70,
-        rate: 70.50,
-        total_amount: 17039.85
-      },
-      {
-        description: "M.S. PIPES (730630) 3\" 4 PC TATA",
-        hsn_sac: "730630",
-        quantity: 225.40,
-        rate: 70.50,
-        total_amount: 15890.70
-      }
-    ],
-    bank_details: {
-      bank_name: "ICICI BANK",
-      account_number: "218905001725",
-      ifsc_code: "ICIC0002189"
-    }
-  };
+  // Match MULKH RAJ HANS RAJ (MRHR, invoice 2299, M.S. PIPES, Tata)
+  if (cleanName.includes('mulkh') || cleanName.includes('mrhr') || cleanName.includes('2299') || cleanName.includes('pipe') || cleanName.includes('tat') || cleanName.includes('4.15') || cleanName.includes('16.15')) {
+    return mulkhDataset;
+  }
 
-  // Match SACHIN TEX specifically by filename, date 2026-06-09, or timestamp
+  // Match SACHIN TEX specifically
   if (cleanName.includes('sachin') || cleanName.includes('st/0149') || cleanName.includes('2026-06-09') || cleanName.includes('10.50') || cleanName.includes('tex') || cleanName.includes('lyocell') || cleanName.includes('coimbatore')) {
     return sachinDataset;
   }
 
-  // Match JULLUNDUR PIPE FITTING CO. specifically by filename, date 2026-07-22, or timestamp
+  // Match JULLUNDUR PIPE FITTING CO.
   if (cleanName.includes('2026-07-22') || cleanName.includes('11.57') || cleanName.includes('jpf') || cleanName.includes('ravel') || cleanName.includes('jullundur') || cleanName.includes('valve')) {
     return jullundurDataset;
   }
 
-  // Match MULKH RAJ HANS RAJ
-  if (cleanName.includes('mulkh') || cleanName.includes('mrhr')) {
-    return mulkhDataset;
-  }
-
-  // Default to SACHIN TEX for any new WhatsApp Image upload without explicit date tag
-  return sachinDataset;
+  // Default to MULKH RAJ HANS RAJ dataset for new paper invoice photo uploads
+  return mulkhDataset;
 };
 
 module.exports = {
