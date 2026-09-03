@@ -81,9 +81,23 @@ const invoiceProxy = createProxyMiddleware({
     }
 });
 
+const multer = require('multer');
+const uploadParser = multer({ storage: multer.memoryStorage() }).any();
+
 app.use((req, res, next) => {
     const fullUrl = req.originalUrl || req.url || req.path;
     if (invoiceFilter(fullUrl, req)) {
+        if (fullUrl.includes('/upload')) {
+            return uploadParser(req, res, (err) => {
+                if (process.env.RENDER || process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
+                    return handleInvoiceExpressFallback(req, res);
+                }
+                return invoiceProxy(req, res, (proxyErr) => {
+                    if (proxyErr) return handleInvoiceExpressFallback(req, res);
+                    next();
+                });
+            });
+        }
         if (process.env.RENDER || process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
             return handleInvoiceExpressFallback(req, res);
         }
