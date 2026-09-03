@@ -10,7 +10,9 @@ export default function useDocuments() {
       const response =
         await API.get("/documents");
 
-      setDocuments(response.data);
+      const raw = response.data;
+      const docs = Array.isArray(raw) ? raw : (raw?.documents || raw?.data || []);
+      setDocuments(docs);
     } catch (error) {
       console.error(error);
     }

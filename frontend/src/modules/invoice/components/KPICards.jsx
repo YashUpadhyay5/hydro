@@ -425,16 +425,17 @@ function KPICards({ selectedDocument, documents = [], localExtraction = null, db
   }
 
   // Show aggregate stats when no document is selected
-  const totalScanned = documents.filter((d) => d.status !== "DELETED").length;
-  const failedInvoices = documents.filter((d) => d.status === "FAILED").length;
-  const archivedInvoices = documents.filter((d) => d.status === "ARCHIVED").length;
-  const validatedInvoices = documents.filter((d) => d.status === "VALIDATED" || d.status === "ARCHIVED").length;
-  const pendingValidation = documents.filter((d) => d.status === "PENDING_VALIDATION").length;
-  const processingInvoices = documents.filter((d) => d.status === "PROCESSING" || d.status === "Processing" || d.status === "Pending" || d.status === "UPLOADING").length;
+  const safeDocs = Array.isArray(documents) ? documents : [];
+  const totalScanned = safeDocs.filter((d) => d && d.status !== "DELETED").length;
+  const failedInvoices = safeDocs.filter((d) => d && d.status === "FAILED").length;
+  const archivedInvoices = safeDocs.filter((d) => d && d.status === "ARCHIVED").length;
+  const validatedInvoices = safeDocs.filter((d) => d && (d.status === "VALIDATED" || d.status === "ARCHIVED")).length;
+  const pendingValidation = safeDocs.filter((d) => d && d.status === "PENDING_VALIDATION").length;
+  const processingInvoices = safeDocs.filter((d) => d && (d.status === "PROCESSING" || d.status === "Processing" || d.status === "Pending" || d.status === "UPLOADING")).length;
 
   // Overall Processing Time Calculation
-  const processedDocs = documents.filter(
-    (d) => d.status === "PENDING_VALIDATION" || d.status === "VALIDATED" || d.status === "ARCHIVED"
+  const processedDocs = safeDocs.filter(
+    (d) => d && (d.status === "PENDING_VALIDATION" || d.status === "VALIDATED" || d.status === "ARCHIVED")
   );
   const avgOcrTimeSec = processedDocs.length > 0
     ? processedDocs.reduce((acc, curr) => acc + (parseFloat(curr.processing_time_ms) || 0), 0) / processedDocs.length / 1000

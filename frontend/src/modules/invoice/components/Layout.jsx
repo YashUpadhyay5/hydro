@@ -23,8 +23,9 @@ export default function Layout() {
   const loadDocuments = async () => {
     try {
       const res = await API.get("/documents");
-      const docs = res.data || [];
-      docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      const raw = res.data;
+      const docs = Array.isArray(raw) ? raw : (raw?.documents || raw?.data || []);
+      docs.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
       setDocuments(docs);
     } catch (e) {
       console.error("Failed to load documents:", e);
