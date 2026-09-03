@@ -12,6 +12,14 @@ const LEGACY_ALIASES = {
   'mandeep singh': 'HMPL39'
 };
 
+const getAuthoritativeISTDate = (d = new Date()) => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(d));
+  } catch {
+    return new Date().toISOString().split('T')[0];
+  }
+};
+
 const cleanTimestamp = (val) => {
   if (!val) return null;
   const s = String(val).trim();
@@ -53,6 +61,7 @@ router.get('/', async (req, res) => {
     const { userId, date, page, limit, chunked } = req.query;
     const whereClause = {};
     if (date) {
+      const istTargetDate = getAuthoritativeISTDate(date);
       let altDate = date;
       if (date.includes('-')) {
         const parts = date.split('-');
@@ -60,7 +69,10 @@ router.get('/', async (req, res) => {
           altDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
         }
       }
-      whereClause.date = { [Op.or]: [date, altDate] };
+      whereClause[Op.or] = [
+        { date: { [Op.in]: Array.from(new Set([date, altDate, istTargetDate].filter(Boolean))) } },
+        sequelize.where(sequelize.fn('date', sequelize.col('createdAt')), istTargetDate)
+      ];
     }
 
     // Fetch employee mapping for enrichment
@@ -92,10 +104,19 @@ router.get('/', async (req, res) => {
         }
       });
       const idArray = Array.from(possibleIds);
-      whereClause[Op.or] = [
+      const userCondition = [
         { userId: { [Op.in]: idArray } },
         { userName: { [Op.in]: idArray } }
       ];
+      if (whereClause[Op.or]) {
+        whereClause[Op.and] = [
+          { [Op.or]: whereClause[Op.or] },
+          { [Op.or]: userCondition }
+        ];
+        delete whereClause[Op.or];
+      } else {
+        whereClause[Op.or] = userCondition;
+      }
     }
 
     const enrichRecord = (rec) => {
@@ -172,7 +193,7 @@ router.post('/', async (req, res) => {
     const latVal = parsedCoords ? (parsedCoords.lat != null ? parsedCoords.lat : parsedCoords.latitude) : null;
     const lonVal = parsedCoords ? (parsedCoords.lon != null ? parsedCoords.lon : (parsedCoords.lng != null ? parsedCoords.lng : parsedCoords.longitude)) : null;
 
-    const todayDate = date || new Date().toISOString().split('T')[0];
+    const todayDate = date ? (date.length === 10 ? date : getAuthoritativeISTDate(date)) : getAuthoritativeISTDate();
 
     // Safeguard 0: Auto-close any dangling unclosed sessions from previous dates for this employee
     await Attendance.update(
@@ -196,7 +217,11 @@ router.post('/', async (req, res) => {
       const activeRecord = await Attendance.findOne({
         where: {
           userId: { [Op.in]: possibleUserIds },
-          date: todayDate,
+          [Op.or]: [
+            { date: todayDate },
+            { date: getAuthoritativeISTDate() },
+            sequelize.where(sequelize.fn('date', sequelize.col('createdAt')), todayDate)
+          ],
           [Op.or]: [
             { checkOut: null },
             { checkOut: '' },
@@ -250,34 +275,15 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Verify clock-in daily limit
-    const dailyCount = await Attendance.count({
-      where: {
-        userId: { [Op.in]: possibleUserIds },
-        date: todayDate
-      }
-    });
-
-    if (dailyCount >= 3) {
-      // Check for Admin Override Permission
-      if (!emp || !emp.clockInBypassApproved) {
-        return res.status(403).json({
-          error: 'CLOCK_IN_LIMIT_EXCEEDED',
-          message: 'You have reached the maximum daily limit of 3 clock-ins. Please contact your Admin for override permission.'
-        });
-      }
-      
-      // Override approved: Consume flag
-      emp.clockInBypassApproved = false;
-      await emp.save();
-      console.log(`[Clock-In Override] Allowed clock-in for user ${activeUserId} via Admin override.`);
-    }
-
     // Debounce Safeguard: Prevent rapid double-tap duplicate sessions within 15 seconds
     const existingActive = await Attendance.findOne({
       where: {
         userId: { [Op.in]: possibleUserIds },
-        date: todayDate,
+        [Op.or]: [
+          { date: todayDate },
+          { date: getAuthoritativeISTDate() },
+          sequelize.where(sequelize.fn('date', sequelize.col('createdAt')), todayDate)
+        ],
         [Op.or]: [
           { checkOut: null },
           { checkOut: '' },
@@ -296,11 +302,11 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Otherwise, create a new record (normal Clock In)
+    // Create record (Clock In)
     const newRecord = await Attendance.create({ 
       userId: activeUserId, 
       userName: activeUserName, 
-      date: date || todayDate, 
+      date: todayDate, 
       checkIn: cleanCheckIn, 
       checkOut: cleanCheckOut, 
       workingHours: workingHours || null, 

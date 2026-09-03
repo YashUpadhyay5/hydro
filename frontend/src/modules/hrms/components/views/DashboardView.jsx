@@ -110,8 +110,16 @@ export default function DashboardView({ totalEmployees, onViewChange }) {
         }
     };
 
+    const getAuthoritativeISTDate = (d = new Date()) => {
+        try {
+            return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(d));
+        } catch {
+            return new Date().toISOString().split('T')[0];
+        }
+    };
+
     const fetchDashboardData = async () => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getAuthoritativeISTDate();
         const results = await Promise.allSettled([
             api.getLeaves(),
             api.getExpenses(),
@@ -139,8 +147,10 @@ export default function DashboardView({ totalEmployees, onViewChange }) {
 
         const todaysRecords = attendance.filter(a => {
             if (!a) return false;
-            if (a.date === today) return true;
+            const aDate = a.date ? (a.date.length === 10 ? a.date : getAuthoritativeISTDate(a.date)) : null;
+            if (aDate === today) return true;
             if (a.createdAt && String(a.createdAt).startsWith(today)) return true;
+            if (a.createdAt && getAuthoritativeISTDate(a.createdAt) === today) return true;
             return false;
         });
 

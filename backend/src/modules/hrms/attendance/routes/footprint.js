@@ -7,6 +7,12 @@ const { resolveCellToCoords } = require('../../../../core/utils/cellResolver');
 const { Op } = require('sequelize');
 const RouteReplayService = require('../services/RouteReplayService');
 
+const LEGACY_ALIASES = {
+  'emp0128': 'HMPL39',
+  'mandeep': 'HMPL39',
+  'mandeep singh': 'HMPL39'
+};
+
 // High-speed in-memory cache for employee last known locations (<0.001ms lookup)
 const lastKnownLocationMap = new Map();
 
@@ -533,16 +539,22 @@ router.post('/batch', async (req, res) => {
         }
       }
 
+      const rawUserStr = String(userId).trim().toLowerCase();
+      const searchTerms = [String(userId)];
+      if (LEGACY_ALIASES[rawUserStr]) {
+        searchTerms.push(LEGACY_ALIASES[rawUserStr]);
+      }
+
       const Employee = require('../../../../shared/models/Employee');
       let empObj = null;
       try {
         empObj = await Employee.findOne({
           where: {
             [Op.or]: [
-              { id: String(userId) },
-              { empCode: String(userId) },
-              sequelize.where(sequelize.col('emp_code'), String(userId)),
-              { name: String(userId) }
+              { id: { [Op.in]: searchTerms } },
+              { empCode: { [Op.in]: searchTerms } },
+              sequelize.where(sequelize.fn('lower', sequelize.col('emp_code')), { [Op.in]: searchTerms.map(s => s.toLowerCase()) }),
+              { name: { [Op.in]: searchTerms } }
             ]
           },
           transaction
@@ -550,8 +562,8 @@ router.post('/batch', async (req, res) => {
       } catch (e) {}
 
       const activeUserIds = empObj 
-        ? Array.from(new Set([empObj.id, empObj.empCode, empObj.emp_code, empObj.name, String(userId)].filter(Boolean)))
-        : [String(userId)];
+        ? Array.from(new Set([empObj.id, empObj.empCode, empObj.emp_code, empObj.name, String(userId), ...searchTerms].filter(Boolean)))
+        : [String(userId), ...searchTerms];
 
       const attRecord = await Attendance.findOne({
         where: {
