@@ -373,7 +373,7 @@ export default function ValidationPage() {
   useEffect(() => {
     if (selectedDocument) {
       setVerificationTime(selectedDocument.verification_time || 0);
-      const base = selectedDocument.final_extraction || selectedDocument.ocr_result?.extraction;
+      const base = selectedDocument.final_extraction || selectedDocument.ocr_result?.extraction || selectedDocument.extracted_data;
       if (base) {
         setEditableExtraction(normalizeExtraction(base));
         const s = selectedDocument.status;

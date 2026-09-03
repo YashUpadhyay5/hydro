@@ -12,7 +12,7 @@ const getFieldConfidence = (sectionId, fieldKey, value) => {
 };
 
 const getDocumentGrandTotal = (doc) => {
-  const extraction = doc?.final_extraction || doc?.ocr_result?.extraction;
+  const extraction = doc?.final_extraction || doc?.ocr_result?.extraction || doc?.extracted_data;
   if (!extraction) return 0;
   const ts = extraction.tax_summary || {};
   
@@ -154,7 +154,7 @@ function KPICards({ selectedDocument, documents = [], localExtraction = null, db
   // If a document is selected, show its specific details
   if (selectedDocument) {
     const ocr = selectedDocument.ocr_result || {};
-    const extraction = localExtraction || selectedDocument.final_extraction || ocr.extraction || {};
+    const extraction = localExtraction || selectedDocument.final_extraction || ocr.extraction || selectedDocument.extracted_data || {};
     const metadata = ocr.metadata || {};
 
     const status = selectedDocument.status || "Pending";
