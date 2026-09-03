@@ -65,6 +65,8 @@ const { handleInvoiceExpressFallback } = require('./modules/invoice/routes/invoi
 const invoiceProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
+    timeout: 2000,
+    proxyTimeout: 2000,
     pathRewrite: {
         '^/api/v1/invoice': '/api'
     },
@@ -76,7 +78,7 @@ const invoiceProxy = createProxyMiddleware({
 app.use((req, res, next) => {
     const fullUrl = req.originalUrl || req.url || req.path;
     if (invoiceFilter(fullUrl, req)) {
-        if (process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
+        if (process.env.RENDER || process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
             return handleInvoiceExpressFallback(req, res);
         }
         return invoiceProxy(req, res, (err) => {
