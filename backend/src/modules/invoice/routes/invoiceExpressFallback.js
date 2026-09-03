@@ -219,15 +219,11 @@ const inMemoryDocuments = [
 ];
 
 const handleInvoiceExpressFallback = (req, res) => {
-  const path = req.path || req.originalUrl || '';
-
-  if (path.includes('/templates')) {
-    return res.status(200).json([defaultTemplate]);
-  }
+  const fullUrl = req.originalUrl || req.url || req.path || '';
 
   // Explicitly handle document preview file serving to avoid JSON in iframe
-  if (path.includes('/file')) {
-    const docMatch = path.match(/\/documents\/([^\/]+)\/file/);
+  if (fullUrl.includes('/file')) {
+    const docMatch = fullUrl.match(/\/documents\/([^\/]+)\/file/) || fullUrl.match(/\/([^\/]+)\/file/);
     const docId = docMatch ? docMatch[1] : null;
     const foundDoc = inMemoryDocuments.find(d => d.document_id === docId || d.id === docId) || inMemoryDocuments[0];
     
@@ -235,7 +231,11 @@ const handleInvoiceExpressFallback = (req, res) => {
     return res.status(200).send(renderSampleInvoiceSVG(foundDoc));
   }
 
-  if (path.includes('/upload')) {
+  if (fullUrl.includes('/templates')) {
+    return res.status(200).json([defaultTemplate]);
+  }
+
+  if (fullUrl.includes('/upload')) {
     const uploadedFiles = req.files || (req.file ? [req.file] : []);
     const fileName = uploadedFiles.length > 0 && uploadedFiles[0].originalname ? uploadedFiles[0].originalname : "Uploaded_Invoice.pdf";
     const docId = `doc_${Date.now()}`;
@@ -265,18 +265,18 @@ const handleInvoiceExpressFallback = (req, res) => {
   }
 
   // Handle single document fetch: GET /api/documents/:id or GET /api/v1/invoice/documents/:id
-  const docMatch = path.match(/\/documents\/([^\/]+)$/);
-  if (docMatch && !path.includes('/file') && !path.includes('/time') && !path.includes('/archive')) {
+  const docMatch = fullUrl.match(/\/documents\/([^\/]+)$/);
+  if (docMatch && !fullUrl.includes('/file') && !fullUrl.includes('/time') && !fullUrl.includes('/archive')) {
     const docId = docMatch[1];
     const foundDoc = inMemoryDocuments.find(d => d.document_id === docId || d.id === docId) || inMemoryDocuments[0];
     return res.status(200).json(foundDoc);
   }
 
-  if (path.includes('/inventory') || path.includes('/documents') || path.includes('/archive')) {
+  if (fullUrl.includes('/inventory') || fullUrl.includes('/documents') || fullUrl.includes('/archive')) {
     return res.status(200).json(inMemoryDocuments);
   }
 
-  if (path.includes('/export')) {
+  if (fullUrl.includes('/export')) {
     return res.status(200).json({
       success: true,
       download_url: "#",
