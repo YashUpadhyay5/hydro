@@ -249,20 +249,22 @@ const handleInvoiceExpressFallback = async (req, res) => {
     return res.status(200).json([defaultTemplate]);
   }
 
+const { extractInvoiceData } = require('../../../shared/services/runpodNodeService');
+
   if (fullUrl.includes('/upload')) {
     const uploadedFiles = req.files || (req.file ? [req.file] : []);
     const uploadedFile = uploadedFiles.length > 0 ? uploadedFiles[0] : null;
     const fileName = uploadedFile && uploadedFile.originalname ? uploadedFile.originalname : "Uploaded_Invoice.pdf";
     const docId = `doc_${Date.now()}`;
-    const extractionCopy = JSON.parse(JSON.stringify(sampleExtraction));
-    extractionCopy.invoice_details.invoice_number = `INV/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`;
-    extractionCopy.invoice_details.invoice_date = new Date().toISOString().split('T')[0];
+    const fileBuf = uploadedFile && (uploadedFile.buffer || (uploadedFile.path && require('fs').existsSync(uploadedFile.path) ? require('fs').readFileSync(uploadedFile.path) : null));
 
     let cloudRes = null;
-    if (uploadedFile && (uploadedFile.buffer || uploadedFile.path)) {
-      const fileBuf = uploadedFile.buffer || require('fs').readFileSync(uploadedFile.path);
+    if (uploadedFile && fileBuf) {
       cloudRes = await uploadToCloudinary(fileBuf, uploadedFile.mimetype || 'application/pdf', fileName);
     }
+
+    // Dynamic RunPod AI / Smart Document OCR Extraction
+    const dynamicExtraction = await extractInvoiceData(fileBuf, uploadedFile?.mimetype || 'application/pdf', fileName);
 
     const newDoc = {
       id: docId,
@@ -274,9 +276,9 @@ const handleInvoiceExpressFallback = async (req, res) => {
       status: "VALIDATED",
       confidence_score: 97.8,
       created_at: new Date().toISOString(),
-      final_extraction: extractionCopy,
-      ocr_result: { confidence: 97.8, extraction: extractionCopy },
-      extracted_data: extractionCopy
+      final_extraction: dynamicExtraction,
+      ocr_result: { confidence: 97.8, extraction: dynamicExtraction },
+      extracted_data: dynamicExtraction
     };
     
     inMemoryDocuments.unshift(newDoc);
