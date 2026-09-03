@@ -71,12 +71,13 @@ const { handleInvoiceExpressFallback } = require('./modules/invoice/routes/invoi
 const invoiceProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
-    timeout: 2000,
-    proxyTimeout: 2000,
+    timeout: 30000,
+    proxyTimeout: 30000,
     pathRewrite: {
         '^/api/v1/invoice': '/api'
     },
     onError: (err, req, res) => {
+        console.error(`[InvoiceProxy Error] target unreachable: ${err.message}`);
         return handleInvoiceExpressFallback(req, res);
     }
 });
@@ -89,17 +90,11 @@ app.use((req, res, next) => {
     if (invoiceFilter(fullUrl, req)) {
         if (fullUrl.includes('/upload')) {
             return uploadParser(req, res, (err) => {
-                if (process.env.RENDER || process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
-                    return handleInvoiceExpressFallback(req, res);
-                }
                 return invoiceProxy(req, res, (proxyErr) => {
                     if (proxyErr) return handleInvoiceExpressFallback(req, res);
                     next();
                 });
             });
-        }
-        if (process.env.RENDER || process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
-            return handleInvoiceExpressFallback(req, res);
         }
         return invoiceProxy(req, res, (err) => {
             if (err) return handleInvoiceExpressFallback(req, res);

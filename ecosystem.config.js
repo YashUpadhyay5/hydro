@@ -18,7 +18,7 @@ module.exports = {
     {
       name: 'hydro-invoice-backend',
       script: 'venv/Scripts/python.exe',
-      args: '-m uvicorn app:app --port 8080',
+      args: '-m uvicorn app:app --host 0.0.0.0 --port 8080',
       cwd: 'C:/Users/Falcon/Desktop/hydro-copy/Hydro/backend/src/modules/invoice'
     },
     {
