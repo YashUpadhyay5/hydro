@@ -4,6 +4,8 @@
  * whenever the local Python FastAPI OCR service (port 8080) is offline/unreachable on cloud platforms (e.g. Render).
  */
 
+const { uploadToCloudinary } = require('../../../shared/services/cloudinaryService');
+
 const defaultTemplate = {
   id: "default_gst_template",
   name: "Standard B2B Invoice Template",
@@ -218,7 +220,7 @@ const inMemoryDocuments = [
   }
 ];
 
-const handleInvoiceExpressFallback = (req, res) => {
+const handleInvoiceExpressFallback = async (req, res) => {
   const fullUrl = req.originalUrl || req.url || req.path || '';
 
   // Explicitly handle document preview file serving to avoid JSON in iframe
@@ -227,6 +229,18 @@ const handleInvoiceExpressFallback = (req, res) => {
     const docId = docMatch ? docMatch[1] : null;
     const foundDoc = inMemoryDocuments.find(d => d.document_id === docId || d.id === docId) || inMemoryDocuments[0];
     
+    if (foundDoc && foundDoc.file_url) {
+      if (foundDoc.file_url.startsWith('data:')) {
+        const parts = foundDoc.file_url.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'application/pdf';
+        const buffer = Buffer.from(parts[1], 'base64');
+        res.setHeader('Content-Type', mimeType);
+        return res.status(200).send(buffer);
+      }
+      return res.redirect(foundDoc.file_url);
+    }
+
     res.setHeader('Content-Type', 'image/svg+xml');
     return res.status(200).send(renderSampleInvoiceSVG(foundDoc));
   }
@@ -237,17 +251,26 @@ const handleInvoiceExpressFallback = (req, res) => {
 
   if (fullUrl.includes('/upload')) {
     const uploadedFiles = req.files || (req.file ? [req.file] : []);
-    const fileName = uploadedFiles.length > 0 && uploadedFiles[0].originalname ? uploadedFiles[0].originalname : "Uploaded_Invoice.pdf";
+    const uploadedFile = uploadedFiles.length > 0 ? uploadedFiles[0] : null;
+    const fileName = uploadedFile && uploadedFile.originalname ? uploadedFile.originalname : "Uploaded_Invoice.pdf";
     const docId = `doc_${Date.now()}`;
     const extractionCopy = JSON.parse(JSON.stringify(sampleExtraction));
     extractionCopy.invoice_details.invoice_number = `INV/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`;
     extractionCopy.invoice_details.invoice_date = new Date().toISOString().split('T')[0];
+
+    let cloudRes = null;
+    if (uploadedFile && (uploadedFile.buffer || uploadedFile.path)) {
+      const fileBuf = uploadedFile.buffer || require('fs').readFileSync(uploadedFile.path);
+      cloudRes = await uploadToCloudinary(fileBuf, uploadedFile.mimetype || 'application/pdf', fileName);
+    }
 
     const newDoc = {
       id: docId,
       document_id: docId,
       filename: fileName,
       original_filename: fileName,
+      file_url: cloudRes?.secure_url || null,
+      mimetype: uploadedFile?.mimetype || 'application/pdf',
       status: "VALIDATED",
       confidence_score: 97.8,
       created_at: new Date().toISOString(),

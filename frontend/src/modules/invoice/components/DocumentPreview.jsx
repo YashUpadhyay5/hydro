@@ -54,10 +54,10 @@ function DocumentPreview({ document, verificationTime = 0, timerActive = false, 
           100% { opacity: 1; }
         }
       `}</style>
-      <div className="preview-header">
+      <div className="preview-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px" }}>
         <span className="preview-title" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {(() => {
-            const extraction = document.final_extraction || document.ocr_result?.extraction;
+            const extraction = document.final_extraction || document.ocr_result?.extraction || document.extracted_data;
             const vendorName = extraction?.vendor_details?.name;
             const invoiceNumber = extraction?.invoice_details?.invoice_number;
             if (vendorName && invoiceNumber) {
@@ -80,6 +80,22 @@ function DocumentPreview({ document, verificationTime = 0, timerActive = false, 
             </span>
           ) : null}
         </span>
+
+        {/* Toolbar Action Buttons */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <button className="btn btn-secondary" onClick={zoomOut} title="Zoom Out" style={{ padding: "4px 8px", fontSize: "12px", height: "28px" }}>
+            🔍−
+          </button>
+          <button className="btn btn-secondary" onClick={zoomFit} title="Reset Zoom" style={{ padding: "4px 8px", fontSize: "11px", fontWeight: "700", height: "28px" }}>
+            {Math.round(zoom * 100)}%
+          </button>
+          <button className="btn btn-secondary" onClick={zoomIn} title="Zoom In" style={{ padding: "4px 8px", fontSize: "12px", height: "28px" }}>
+            🔍+
+          </button>
+          <button className="btn btn-secondary" onClick={handleDownload} title="Download Original File" style={{ padding: "4px 10px", fontSize: "11px", fontWeight: "600", height: "28px", display: "flex", alignItems: "center", gap: "4px" }}>
+            📥 Download
+          </button>
+        </div>
       </div>
 
       <div className="document-viewer-container">
