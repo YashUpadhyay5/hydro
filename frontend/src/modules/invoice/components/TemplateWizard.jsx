@@ -35,9 +35,12 @@ export default function TemplateWizard({ isOpen, files, onClose, onProcess, show
   const loadTemplates = async () => {
     try {
       const res = await API.get("/templates");
-      setTemplates(res.data || []);
-      const def = res.data.find(t => t.is_default) || res.data[0];
-      if (def && !selectedTemplate) {
+      const list = Array.isArray(res.data) 
+        ? res.data 
+        : (res.data?.templates || res.data?.data || []);
+      setTemplates(list);
+      const def = list.find(t => t.is_default) || list[0];
+      if (def) {
         setSelectedTemplate(JSON.parse(JSON.stringify(def)));
       }
     } catch (e) {
