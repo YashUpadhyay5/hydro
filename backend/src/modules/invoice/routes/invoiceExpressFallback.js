@@ -285,6 +285,8 @@ const handleInvoiceExpressFallback = async (req, res) => {
       message: "Invoice uploaded and processed successfully via Cloud OCR Engine.",
       documents: [newDoc]
     });
+  }
+
   // Handle document deletion: DELETE /api/documents/:id or DELETE /api/v1/invoice/documents/:id
   if (req.method === 'DELETE') {
     const docMatch = fullUrl.match(/\/documents\/([^\/]+)$/);
