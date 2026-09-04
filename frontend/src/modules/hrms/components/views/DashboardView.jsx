@@ -436,6 +436,11 @@ export default function DashboardView({ totalEmployees, onViewChange }) {
         fetchAnnouncements();
         loadHolidays();
 
+        // Immediate secondary sync at 1.5s to ensure instant render after auth hydration
+        const initialSyncTimer = setTimeout(() => {
+            fetchDashboardData();
+        }, 1500);
+
         // Real-time high-speed background auto-refresh every 5 seconds (zero-cache)
         const intervalId = setInterval(() => {
             fetchDashboardData();
@@ -452,6 +457,7 @@ export default function DashboardView({ totalEmployees, onViewChange }) {
         document.addEventListener('visibilitychange', handleFocus);
 
         return () => {
+            clearTimeout(initialSyncTimer);
             clearInterval(intervalId);
             window.removeEventListener('focus', handleFocus);
             document.removeEventListener('visibilitychange', handleFocus);

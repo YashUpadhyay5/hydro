@@ -59,9 +59,9 @@ const startServer = async () => {
     await runSeeders(sequelize);
     await loadSites();
     
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
       bindAttempts = 0;
-      console.log(`Server executing active connection interface protocols across port: ${PORT}`);
+      console.log(`Server executing active connection interface protocols across port: ${PORT} (0.0.0.0)`);
 
       // CHANGE 7 & CHANGE 1: SERVER STARTUP REPORT & ROUTE AUDIT LOGS
       try {
@@ -72,8 +72,8 @@ const startServer = async () => {
         console.log(` Express Version   : v${expressPkg.version}`);
         console.log(` Node Version      : ${process.version}`);
         console.log(` Listening Port    : ${PORT}`);
-        console.log(` API Base URL      : http://45.122.121.237:${PORT}/api`);
-        console.log(` Database Connected: ONLINE (Sequelize MySQL)`);
+        console.log(` API Base URL      : http://0.0.0.0:${PORT}/api`);
+        console.log(` Database Connected: ONLINE (Sequelize SQLite/MySQL)`);
         console.log(`----------------------------------------------------------`);
         console.log(` REGISTERED ROUTE AUDIT LOGS:`);
         console.log(`----------------------------------------------------------`);
@@ -113,6 +113,12 @@ const startServer = async () => {
     // Graceful Shutdown Handlers for PM2 and Windows Process Management
     const gracefulShutdown = () => {
       console.log('Received shutdown signal, closing server sockets gracefully...');
+      try {
+        if (io && typeof io.close === 'function') io.close();
+      } catch (e) {}
+      if (typeof server.closeAllConnections === 'function') {
+        server.closeAllConnections();
+      }
       server.close(() => {
         console.log('HTTP server closed.');
         sequelize.close().then(() => {
@@ -120,7 +126,7 @@ const startServer = async () => {
           process.exit(0);
         }).catch(() => process.exit(0));
       });
-      setTimeout(() => process.exit(0), 3000);
+      setTimeout(() => process.exit(0), 2000);
     };
 
     process.on('SIGTERM', gracefulShutdown);

@@ -319,6 +319,48 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Auto-Merge Reconnection Safeguard:
+    // If a session was closed very recently (< 5 minutes ago) due to an offline sync or reconnection,
+    // merge this clock-in back into that session to preserve one continuous active shift.
+    const recentClosed = await Attendance.findOne({
+      where: {
+        userId: { [Op.in]: possibleUserIds },
+        [Op.or]: [
+          { date: todayDate },
+          { date: getAuthoritativeISTDate() },
+          sequelize.where(sequelize.fn('date', sequelize.col('createdAt')), todayDate)
+        ],
+        checkOut: { [Op.ne]: null }
+      },
+      order: [['updatedAt', 'DESC']]
+    });
+
+    if (recentClosed && recentClosed.checkOut) {
+      const timeSinceClosed = Date.now() - new Date(recentClosed.updatedAt || recentClosed.createdAt).getTime();
+      if (timeSinceClosed < 300000) {
+        console.log(`[Attendance Session Merge] Merged clock-in into existing session ${recentClosed.id} (closed ${Math.round(timeSinceClosed / 1000)}s ago) to maintain continuous shift.`);
+        recentClosed.checkOut = null;
+        recentClosed.workingHours = null;
+        if (coords) recentClosed.coords = typeof coords === 'string' ? coords : JSON.stringify(coords);
+        await recentClosed.save();
+
+        const io = req.app ? req.app.get('io') : null;
+        if (io) {
+          try {
+            io.emit('ATTENDANCE_PUNCH', {
+              action: 'CLOCK_IN',
+              userId: activeUserId,
+              userName: activeUserName,
+              record: recentClosed,
+              timestamp: Date.now()
+            });
+            io.emit('ATTENDANCE_UPDATE', { date: todayDate });
+          } catch (sockErr) {}
+        }
+        return res.status(200).json(recentClosed);
+      }
+    }
+
     // Create record (Clock In)
     const newRecord = await Attendance.create({ 
       userId: activeUserId, 
