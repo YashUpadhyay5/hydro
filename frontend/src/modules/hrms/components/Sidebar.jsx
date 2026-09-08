@@ -102,20 +102,22 @@ export default function Sidebar({ adminUser, currentView, trackingOrigin, onView
             </div>
 
             {/* Sidebar Brand Header */}
-            <div className="sidebar-header" style={{ justifyContent: !isExpanded ? 'center' : 'flex-start', padding: !isExpanded ? '10px 0' : '10px 12px', gap: '8px', borderBottom: '1px solid var(--border-glass)', minHeight: '46px' }}>
-                <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: isTrackingManager ? '#d97706' : isFieldInvoiceManager ? '#059669' : '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(37, 99, 235, 0.2)', flexShrink: 0 }}>
-                    <i className={`fa-solid ${isNonAdminManager ? 'fa-user-shield' : 'fa-building-user'}`} style={{ fontSize: '13px', color: '#ffffff' }}></i>
-                </div>
-                {isExpanded && (
-                    <div style={{ minWidth: 0 }}>
-                        <h2 style={{ fontSize: '12.5px', fontWeight: 700, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {isTrackingManager ? 'Tracking Manager' : isFieldInvoiceManager ? 'Field & Invoice' : 'HRMS Suite'}
-                        </h2>
-                        <span style={{ fontSize: '9px', fontWeight: 700, color: isTrackingManager ? '#d97706' : isFieldInvoiceManager ? '#059669' : '#2563eb', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'block', marginTop: '1px' }}>
-                            {isTrackingManager ? 'Operations' : isFieldInvoiceManager ? 'Field Ops' : 'Enterprise'}
-                        </span>
+            <div className="sidebar-header" style={{ justifyContent: !isExpanded ? 'center' : 'space-between', padding: !isExpanded ? '10px 0' : '10px 12px', gap: '8px', borderBottom: '1px solid var(--border-glass)', minHeight: '46px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: isTrackingManager ? '#d97706' : isFieldInvoiceManager ? '#059669' : '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(37, 99, 235, 0.2)', flexShrink: 0 }}>
+                        <i className={`fa-solid ${isNonAdminManager ? 'fa-user-shield' : 'fa-building-user'}`} style={{ fontSize: '13px', color: '#ffffff' }}></i>
                     </div>
-                )}
+                    {isExpanded && (
+                        <div style={{ minWidth: 0 }}>
+                            <h2 style={{ fontSize: '12.5px', fontWeight: 700, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {isTrackingManager ? 'Tracking Manager' : isFieldInvoiceManager ? 'Field & Invoice' : 'HRMS Suite'}
+                            </h2>
+                            <span style={{ fontSize: '9px', fontWeight: 700, color: isTrackingManager ? '#d97706' : isFieldInvoiceManager ? '#059669' : '#2563eb', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'block', marginTop: '1px' }}>
+                                {isTrackingManager ? 'Operations' : isFieldInvoiceManager ? 'Field Ops' : 'Enterprise'}
+                            </span>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Nav Menu with Categorized Sections */}

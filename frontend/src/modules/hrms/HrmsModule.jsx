@@ -281,17 +281,39 @@ function App() {
             />
             <main className="main-content" style={{ overflow: 'hidden', height: '100vh', display: 'flex', flexDirection: 'column' }}>
                 <header className="top-header glass" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', top: 0, zIndex: 100, background: 'var(--panel-bg)', boxShadow: '0 1px 4px rgba(0,0,0,0.03)', margin: '0 0 10px 0', borderRadius: '10px', padding: '6px 14px', minHeight: '46px' }}>
-                    <div className="header-left">
-                        <h1 id="current-view-title" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>{getViewTitle()}</h1>
+                    <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button
+                            type="button"
+                            className="mobile-hamburger-btn"
+                            onClick={() => setIsSidebarOpen(true)}
+                            title="Open Navigation Menu"
+                            aria-label="Open Navigation Menu"
+                            style={{
+                                display: 'none',
+                                background: 'var(--input-bg)',
+                                border: '1px solid var(--border-glass)',
+                                color: 'var(--text-primary)',
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '8px',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                fontSize: '15px'
+                            }}
+                        >
+                            <i className="fa-solid fa-bars"></i>
+                        </button>
+                        <h1 id="current-view-title" style={{ margin: 0, fontSize: 'clamp(1rem, 2.5vw, 1.15rem)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getViewTitle()}</h1>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <button 
                             onClick={toggleTheme}
                             style={{
                                 background: 'var(--bg-dark)',
                                 border: '1px solid var(--border-glass)',
                                 color: 'var(--text-primary)',
-                                padding: '5px 12px',
+                                padding: '5px 10px',
                                 height: '32px',
                                 borderRadius: '7px',
                                 cursor: 'pointer',
@@ -303,7 +325,7 @@ function App() {
                                 transition: 'all 0.15s'
                             }}
                         >
-                            {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+                            {theme === 'light' ? '🌙' : '☀️'}
                         </button>
                         <div className="admin-profile-compact" onClick={() => navigateToView('dashboard-view')}>
                             <div className="avatar" style={{ width: '28px', height: '28px', fontSize: '11px' }}>
