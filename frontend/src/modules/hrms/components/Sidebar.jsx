@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function Sidebar({ adminUser, currentView, trackingOrigin, onViewChange, onLogout, isSidebarOpen, isCollapsed, onToggleCollapse }) {
+export default function Sidebar({ adminUser, currentView, trackingOrigin, onViewChange, onLogout, isSidebarOpen, isCollapsed, onToggleCollapse, onCloseMobileDrawer }) {
     const [isHovered, setIsHovered] = React.useState(false);
     
     const navSections = [
@@ -44,7 +44,9 @@ export default function Sidebar({ adminUser, currentView, trackingOrigin, onView
         }
     ];
 
-    const isExpanded = !isCollapsed || isHovered;
+    // Force expansion on mobile or when drawer is open
+    const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || isSidebarOpen);
+    const isExpanded = isMobile || isSidebarOpen ? true : (!isCollapsed || isHovered);
 
     // Determine parent route if viewing employee-tracking-view
     const effectiveActiveView = currentView === 'employee-tracking-view' ? (trackingOrigin || 'attendance-view') : currentView;
@@ -66,10 +68,9 @@ export default function Sidebar({ adminUser, currentView, trackingOrigin, onView
 
     return (
         <aside 
-            className={`sidebar glass ${isSidebarOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''} ${isHovered ? 'hover-expanded' : ''}`} 
+            className={`sidebar glass ${isSidebarOpen ? 'open' : ''} ${isCollapsed && !isSidebarOpen ? 'collapsed' : ''} ${isHovered ? 'hover-expanded' : ''}`} 
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            style={{ position: 'relative', overflow: 'visible' }}
         >
             {/* Smooth Floating Collapse Button */}
             <div 
@@ -118,6 +119,25 @@ export default function Sidebar({ adminUser, currentView, trackingOrigin, onView
                         </div>
                     )}
                 </div>
+                {isSidebarOpen && (
+                    <button
+                        type="button"
+                        onClick={onCloseMobileDrawer}
+                        className="mobile-close-btn"
+                        title="Close Navigation"
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            fontSize: '20px',
+                            cursor: 'pointer',
+                            padding: '2px 8px',
+                            lineHeight: 1
+                        }}
+                    >
+                        &times;
+                    </button>
+                )}
             </div>
 
             {/* Nav Menu with Categorized Sections */}
@@ -143,6 +163,7 @@ export default function Sidebar({ adminUser, currentView, trackingOrigin, onView
                                             key={item.id}
                                             to={item.path} 
                                             className="nav-item"
+                                            onClick={() => onCloseMobileDrawer && onCloseMobileDrawer()}
                                             title={!isExpanded ? item.label : undefined}
                                         >
                                             <i className={`fa-solid ${item.icon}`}></i>
@@ -160,6 +181,7 @@ export default function Sidebar({ adminUser, currentView, trackingOrigin, onView
                                         onClick={(e) => {
                                             e.preventDefault();
                                             onViewChange(item.id);
+                                            if (onCloseMobileDrawer) onCloseMobileDrawer();
                                         }}
                                         title={!isExpanded ? item.label : undefined}
                                     >

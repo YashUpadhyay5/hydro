@@ -271,6 +271,7 @@ function App() {
                 onLogout={handleLogout}
                 isSidebarOpen={isSidebarOpen}
                 isCollapsed={isSidebarCollapsed}
+                onCloseMobileDrawer={() => setIsSidebarOpen(false)}
                 onToggleCollapse={() => {
                     setIsSidebarCollapsed(prev => {
                         const next = !prev;

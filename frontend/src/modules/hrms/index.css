@@ -1065,8 +1065,28 @@ body.dark-theme option {
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4) !important;
     }
 
-    .sidebar.open {
+    .sidebar.open,
+    .sidebar.open.collapsed {
+        width: 290px !important;
         transform: translateX(0) !important;
+    }
+
+    .sidebar.open .nav-item span,
+    .sidebar.open .nav-label,
+    .sidebar.open .admin-info,
+    .sidebar.open .sidebar-header h2,
+    .sidebar.open .sidebar-section-title,
+    .sidebar.open .sidebar-stats {
+        opacity: 1 !important;
+        max-width: 220px !important;
+        visibility: visible !important;
+        display: inline-block !important;
+    }
+
+    .sidebar.open .nav-item {
+        justify-content: flex-start !important;
+        padding: 8px 10px !important;
+        gap: 10px !important;
     }
 
     .sidebar-collapse-btn {
