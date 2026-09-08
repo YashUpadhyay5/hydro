@@ -2616,7 +2616,7 @@ export default function PayRunWizardSteps({
         {/* UNIVERSAL EMPLOYEE COMPLIANCE & PAYOUT QUICK FIX MODAL WITH REACTOR PULSE GLOW */}
         {fixModalEmp && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-            <div className="card glass reactor-glow-highlight" style={{ width: '540px', padding: '24px', borderRadius: '12px', background: 'var(--bg-dark)', border: '2px solid var(--accent-primary)', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)' }}>
+            <div className="card glass reactor-glow-highlight" style={{ width: '92%', maxWidth: '540px', padding: '24px', borderRadius: '12px', background: 'var(--bg-dark)', border: '2px solid var(--accent-primary)', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)' }}>
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>

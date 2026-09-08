@@ -176,7 +176,7 @@ export default function PayRunSummaryCards({ selectedRun, employees = [], employ
       {/* DETAILED FINANCIAL BREAKDOWN MODAL */}
       {detailModalType && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div className="card glass" style={{ width: '850px', maxHeight: '85vh', padding: '24px', borderRadius: '14px', background: 'var(--bg-dark)', border: '1px solid var(--border-glass)', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}>
+          <div className="card glass" style={{ width: '94%', maxWidth: '850px', maxHeight: '85vh', padding: '24px', borderRadius: '14px', background: 'var(--bg-dark)', border: '1px solid var(--border-glass)', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}>
             
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-glass)', paddingBottom: '14px' }}>
