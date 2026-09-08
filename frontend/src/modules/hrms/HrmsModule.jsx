@@ -282,32 +282,10 @@ function App() {
             />
             <main className="main-content" style={{ overflow: 'hidden', height: '100vh', display: 'flex', flexDirection: 'column' }}>
                 <header className="top-header glass" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', top: 0, zIndex: 100, background: 'var(--panel-bg)', boxShadow: '0 1px 4px rgba(0,0,0,0.03)', margin: '0 0 10px 0', borderRadius: '10px', padding: '6px 14px', minHeight: '46px' }}>
-                    <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <button
-                            type="button"
-                            className="mobile-hamburger-btn"
-                            onClick={() => setIsSidebarOpen(true)}
-                            title="Open Navigation Menu"
-                            aria-label="Open Navigation Menu"
-                            style={{
-                                display: 'none',
-                                background: 'var(--input-bg)',
-                                border: '1px solid var(--border-glass)',
-                                color: 'var(--text-primary)',
-                                width: '36px',
-                                height: '36px',
-                                borderRadius: '8px',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                fontSize: '15px'
-                            }}
-                        >
-                            <i className="fa-solid fa-bars"></i>
-                        </button>
+                    <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                         <h1 id="current-view-title" style={{ margin: 0, fontSize: 'clamp(1rem, 2.5vw, 1.15rem)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getViewTitle()}</h1>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
                         <button 
                             onClick={toggleTheme}
                             style={{
@@ -315,16 +293,17 @@ function App() {
                                 border: '1px solid var(--border-glass)',
                                 color: 'var(--text-primary)',
                                 padding: '5px 10px',
-                                height: '32px',
+                                height: '34px',
                                 borderRadius: '7px',
                                 cursor: 'pointer',
-                                fontSize: '0.78rem',
+                                fontSize: '0.85rem',
                                 fontWeight: 600,
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '6px',
                                 transition: 'all 0.15s'
                             }}
+                            title="Toggle Color Theme"
                         >
                             {theme === 'light' ? '🌙' : '☀️'}
                         </button>
@@ -336,6 +315,30 @@ function App() {
                                 <span className="name" style={{ fontSize: '12px', fontWeight: 600 }}>{adminUser?.name || 'Admin'}</span>
                             </div>
                         </div>
+                        <button
+                            type="button"
+                            className="mobile-hamburger-btn"
+                            onClick={() => setIsSidebarOpen(true)}
+                            title="Open Navigation Menu"
+                            aria-label="Open Navigation Menu"
+                            style={{
+                                display: 'none',
+                                background: 'var(--primary-color, #2563eb)',
+                                border: 'none',
+                                color: '#ffffff',
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '8px',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                fontSize: '16px',
+                                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
+                                flexShrink: 0
+                            }}
+                        >
+                            <i className="fa-solid fa-bars"></i>
+                        </button>
                     </div>
                 </header>
 

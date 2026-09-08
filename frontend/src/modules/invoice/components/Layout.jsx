@@ -10,8 +10,13 @@ export default function Layout() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -189,12 +194,73 @@ export default function Layout() {
       onDragLeave={handleDrag}
       onDrop={handleDrop}
     >
+      {/* Top Mobile Bar with Top-Right Menu Button */}
+      <header className="invoice-mobile-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+            <rect width="24" height="24" rx="6" fill="var(--primary-color)" opacity="0.15"/>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="var(--primary-color)" strokeWidth="2"/>
+            <polyline points="14 2 14 8 20 8" stroke="var(--primary-color)" strokeWidth="2"/>
+          </svg>
+          <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>OCR Portal</span>
+        </div>
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+          <button 
+            onClick={toggleTheme}
+            style={{
+              background: 'var(--bg-card-highlight, #f8fafc)',
+              border: '1px solid var(--border-color, #e2e8f0)',
+              color: 'var(--text-primary)',
+              padding: '4px 10px',
+              height: '34px',
+              borderRadius: '7px',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600
+            }}
+            title="Toggle Color Theme"
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+          <button
+            type="button"
+            className="mobile-hamburger-btn"
+            onClick={() => setIsMobileOpen(prev => !prev)}
+            title="Open Navigation Menu"
+            aria-label="Open Navigation Menu"
+            style={{
+              background: 'var(--primary-color, #4f46e5)',
+              border: 'none',
+              color: '#ffffff',
+              width: '36px',
+              height: '36px',
+              borderRadius: '8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: '16px',
+              boxShadow: '0 2px 8px rgba(79, 70, 229, 0.3)',
+              flexShrink: 0
+            }}
+          >
+            <i className="fa-solid fa-bars"></i>
+          </button>
+        </div>
+      </header>
+
+      {/* Mobile Drawer Backdrop Overlay */}
+      <div 
+        className={`invoice-sidebar-overlay ${isMobileOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileOpen(false)}
+      />
+
       {/* Sidebar */}
       {(() => {
-        const isExpanded = !sidebarCollapsed || isSidebarHovered;
+        const isExpanded = isMobileOpen || (!sidebarCollapsed || isSidebarHovered);
         return (
           <aside 
-            className={`sidebar ${sidebarCollapsed ? "collapsed" : ""} ${isSidebarHovered ? "hover-expanded" : ""}`} 
+            className={`sidebar ${sidebarCollapsed ? "collapsed" : ""} ${isSidebarHovered ? "hover-expanded" : ""} ${isMobileOpen ? "mobile-open" : ""}`} 
             onMouseEnter={() => setIsSidebarHovered(true)}
             onMouseLeave={() => setIsSidebarHovered(false)}
             style={{ position: 'relative', overflow: 'visible' }}
@@ -209,9 +275,28 @@ export default function Layout() {
                   <line x1="16" y1="17" x2="8" y2="17" stroke="var(--primary-color)" strokeWidth="2"/>
                 </svg>
                 {isExpanded && (
-                  <div className="sidebar-brand">
-                    <span className="brand-name">OCR Portal</span>
-                    <span className="brand-sub">Invoice Intelligence</span>
+                  <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <div>
+                      <span className="brand-name">OCR Portal</span>
+                      <span className="brand-sub">Invoice Intelligence</span>
+                    </div>
+                    {isMobileOpen && (
+                      <button
+                        onClick={() => setIsMobileOpen(false)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-secondary)',
+                          fontSize: '18px',
+                          cursor: 'pointer',
+                          padding: '4px 8px',
+                          marginLeft: 'auto'
+                        }}
+                        title="Close Menu"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
