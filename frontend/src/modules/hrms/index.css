@@ -1134,9 +1134,111 @@ body.dark-theme option {
         padding-bottom: max(20px, env(safe-area-inset-bottom)) !important;
     }
 
-    /* Cards Grid Mobile Stacking */
+    /* --- HIGH-DENSITY COMPACT ENTERPRISE MOBILE UI --- */
+    /* 1. Compact 2-Column KPI Metric Grid */
     .stats-grid, .grid-4-col, .grid-3-col {
-        grid-template-columns: 1fr !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 8px !important;
+    }
+
+    .stat-card {
+        padding: 10px 12px !important;
+        border-radius: 12px !important;
+        min-height: auto !important;
+        gap: 8px !important;
+    }
+
+    .stat-icon {
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 15px !important;
+        border-radius: 8px !important;
+    }
+
+    .stat-info h3 {
+        font-size: 1.15rem !important;
+        line-height: 1.1 !important;
+    }
+
+    .stat-info p {
+        font-size: 0.7rem !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    /* 2. Compact Horizontal Segmented Filter Control Pills */
+    .tab-btn-group, .status-filter-group, div[style*="flexWrap: 'wrap'"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        padding: 3px !important;
+        gap: 4px !important;
+        background: var(--input-bg, #f8fafc) !important;
+        border-radius: 10px !important;
+        border: 1px solid var(--border-glass, #e2e8f0) !important;
+        -webkit-overflow-scrolling: touch !important;
+        margin-bottom: 8px !important;
+        scrollbar-width: none !important;
+    }
+    
+    .tab-btn-group::-webkit-scrollbar, .status-filter-group::-webkit-scrollbar {
+        display: none !important;
+    }
+
+    .tab-btn, 
+    .tab-btn-group button, 
+    .status-filter-group button, 
+    div[style*="flexWrap: 'wrap'"] > button {
+        width: auto !important;
+        flex: 0 0 auto !important;
+        min-height: 32px !important;
+        height: 32px !important;
+        padding: 4px 12px !important;
+        border-radius: 8px !important;
+        font-size: 0.78rem !important;
+        white-space: nowrap !important;
+        margin-bottom: 0 !important;
+        box-shadow: none !important;
+    }
+
+    /* 3. Compact Search & Toolbar Controls */
+    .filter-toolbar {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+
+    .filter-toolbar .form-group, 
+    .filter-toolbar input, 
+    .filter-toolbar select {
+        height: 36px !important;
+        min-height: 36px !important;
+        font-size: 0.8rem !important;
+    }
+
+    /* 4. Compact Card Renderer for Mobile Lists */
+    .mobile-card-item {
+        background: var(--panel-bg, #ffffff) !important;
+        border: 1px solid var(--border-glass, #e2e8f0) !important;
+        border-radius: 12px !important;
+        padding: 10px 12px !important;
+        margin-bottom: 8px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 6px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
+    }
+
+    /* 5. Dense Buttons */
+    .btn-mobile-compact {
+        min-height: 34px !important;
+        height: 34px !important;
+        padding: 4px 12px !important;
+        font-size: 0.78rem !important;
+        border-radius: 8px !important;
     }
 }
+
 
