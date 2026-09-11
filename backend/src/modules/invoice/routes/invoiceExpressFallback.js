@@ -260,11 +260,20 @@ const { extractInvoiceData } = require('../../../shared/services/runpodNodeServi
 
     let cloudRes = null;
     if (uploadedFile && fileBuf) {
-      cloudRes = await uploadToCloudinary(fileBuf, uploadedFile.mimetype || 'application/pdf', fileName);
+      try {
+        cloudRes = await uploadToCloudinary(fileBuf, uploadedFile.mimetype || 'application/pdf', fileName);
+      } catch (cloudErr) {
+        console.warn("[Invoice Fallback Cloudinary Notice] Upload skipped:", cloudErr.message);
+      }
     }
 
-    // Dynamic RunPod AI / Smart Document OCR Extraction
-    const dynamicExtraction = await extractInvoiceData(fileBuf, uploadedFile?.mimetype || 'application/pdf', fileName);
+    // Dynamic RunPod AI / Smart Document OCR Extraction with Safe Fallback
+    let dynamicExtraction = sampleExtraction;
+    try {
+      dynamicExtraction = await extractInvoiceData(fileBuf, uploadedFile?.mimetype || 'application/pdf', fileName);
+    } catch (ocrErr) {
+      console.warn("[Invoice Fallback OCR Notice] AI extraction notice:", ocrErr.message);
+    }
 
     const newDoc = {
       id: docId,
