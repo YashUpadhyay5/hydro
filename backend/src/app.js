@@ -68,6 +68,30 @@ const invoiceFilter = (pathname, req) => {
 
 const { handleInvoiceExpressFallback } = require('./modules/invoice/routes/invoiceExpressFallback');
 
+const net = require('net');
+let isPythonServiceAvailable = false;
+
+const checkPythonServicePort = () => {
+    const socket = new net.Socket();
+    socket.setTimeout(250);
+    socket.on('connect', () => {
+        isPythonServiceAvailable = true;
+        socket.destroy();
+    });
+    socket.on('error', () => {
+        isPythonServiceAvailable = false;
+        socket.destroy();
+    });
+    socket.on('timeout', () => {
+        isPythonServiceAvailable = false;
+        socket.destroy();
+    });
+    socket.connect(8080, '127.0.0.1');
+};
+
+checkPythonServicePort();
+setInterval(checkPythonServicePort, 20000);
+
 const invoiceProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
@@ -90,6 +114,15 @@ const uploadParser = multer({ storage: multer.memoryStorage() }).any();
 app.use((req, res, next) => {
     const fullUrl = req.originalUrl || req.url || req.path;
     if (invoiceFilter(fullUrl, req)) {
+        if (!isPythonServiceAvailable) {
+            if (fullUrl.includes('/upload')) {
+                return uploadParser(req, res, (err) => {
+                    return handleInvoiceExpressFallback(req, res);
+                });
+            }
+            return handleInvoiceExpressFallback(req, res);
+        }
+
         if (fullUrl.includes('/upload')) {
             return uploadParser(req, res, (err) => {
                 return invoiceProxy(req, res, (proxyErr) => {
