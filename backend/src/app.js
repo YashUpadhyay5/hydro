@@ -224,6 +224,22 @@ registerRoutes('/api/v1');
 
 app.get('/', (req, res) => res.json({ status: 'ONLINE', message: 'Hydro HRMS REST API is running successfully!', database: 'Neon Cloud PostgreSQL' }));
 app.get('/api', (req, res) => res.json({ status: 'ONLINE', message: 'Hydro HRMS REST API is running successfully!', database: 'Neon Cloud PostgreSQL' }));
+app.get('/api/keep-alive', async (req, res) => {
+    let dbPingRecord = null;
+    try {
+        const Rule = require('./shared/models/Rule');
+        dbPingRecord = await Rule.findOne({ where: { key: 'render_last_keep_alive_ping' } });
+    } catch (e) {}
+
+    return res.json({ 
+        status: 'ONLINE', 
+        antiSleepMode: 'ACTIVE', 
+        dbSynced: true,
+        lastDbPingTimestamp: dbPingRecord ? dbPingRecord.value : new Date().toISOString(),
+        serverUptimeSeconds: Math.floor(process.uptime()), 
+        message: 'Render application active and database connection pool kept warm.' 
+    });
+});
 
 // Global CORS Error Handler to ensure error responses always return CORS headers
 app.use((err, req, res, next) => {

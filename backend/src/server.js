@@ -104,6 +104,8 @@ const startServer = async () => {
       // Start background daily scheduled notifications and database backup service
       CronScheduler.start();
       NotificationScheduler.start();
+      const RenderKeepAliveService = require('./shared/services/RenderKeepAliveService');
+      RenderKeepAliveService.start();
       const { initDailyWhatsAppCron } = require('./shared/services/jobs/dailyAttendanceWhatsAppJob');
       initDailyWhatsAppCron();
       const backupService = require('./core/services/backupService');
