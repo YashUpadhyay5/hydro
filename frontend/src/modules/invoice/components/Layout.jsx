@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import API from "../services/api";
 
@@ -11,6 +11,7 @@ export default function Layout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const isFetchingRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -26,6 +27,8 @@ export default function Layout() {
   const toggleTheme = () => setTheme(t => t === "light" ? "dark" : "light");
 
   const loadDocuments = async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const res = await API.get("/documents");
       const raw = res.data;
@@ -34,6 +37,8 @@ export default function Layout() {
       setDocuments(docs);
     } catch (e) {
       console.error("Failed to load documents:", e);
+    } finally {
+      isFetchingRef.current = false;
     }
   };
 

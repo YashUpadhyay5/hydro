@@ -276,6 +276,50 @@ export default function TemplateWizard({ isOpen, files, onClose, onProcess, show
           color: #f3f4f6;
           border-color: #2e303a;
         }
+        @media (max-width: 768px) {
+          .wizard-overlay {
+            padding: 6px !important;
+          }
+          .wizard-modal {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 98vh !important;
+            border-radius: 12px !important;
+          }
+          .wizard-header {
+            padding: 12px 14px !important;
+          }
+          .wizard-header h2 {
+            font-size: 15px !important;
+          }
+          .wizard-header p {
+            font-size: 11px !important;
+          }
+          .wizard-content-split {
+            flex-direction: column !important;
+            overflow-y: auto !important;
+          }
+          .wizard-scroll {
+            width: 100% !important;
+            padding: 14px !important;
+            border-right: none !important;
+            border-bottom: 1px solid var(--border) !important;
+          }
+          .wizard-footer {
+            padding: 12px 14px !important;
+            flex-direction: column-reverse !important;
+            gap: 10px !important;
+            align-items: stretch !important;
+          }
+          .wizard-footer-group {
+            width: 100% !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+          }
+          .wizard-footer button {
+            width: 100% !important;
+          }
+        }
         .wizard-scroll::-webkit-scrollbar {
           width: 6px;
           height: 6px;
@@ -408,9 +452,9 @@ export default function TemplateWizard({ isOpen, files, onClose, onProcess, show
         </div>
 
         {/* Content Area */}
-        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }} className="wizard-content-split">
           {activeTab === "wizard" ? (
-            <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+            <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }} className="wizard-content-split">
               {/* Wizard Left Section */}
               <div className="wizard-scroll" style={{ flex: 1, padding: "24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "20px", borderRight: "1px solid var(--border)" }}>
                 {/* Step 1: Configure OCR Extraction (Sections Selection) */}
@@ -854,7 +898,7 @@ export default function TemplateWizard({ isOpen, files, onClose, onProcess, show
               {wizardStep === 1 ? (
                 <>
                   <span style={{ fontSize: "12px", color: "var(--text)" }}>Step 1: Select sections to extract</span>
-                  <div style={{ display: "flex", gap: "10px" }}>
+                  <div className="wizard-footer-group" style={{ display: "flex", gap: "10px" }}>
                     <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
                     <button className="btn btn-secondary" onClick={() => setWizardStep(2)}>Configure Fields →</button>
                     <button
@@ -872,11 +916,11 @@ export default function TemplateWizard({ isOpen, files, onClose, onProcess, show
                 </>
               ) : (
                 <>
-                  <div style={{ display: "flex", gap: "10px" }}>
+                  <div className="wizard-footer-group" style={{ display: "flex", gap: "10px" }}>
                     <button className="btn btn-secondary" onClick={() => setWizardStep(1)}>← Back</button>
                     <button className="btn btn-secondary" onClick={handleSaveTemplate}>Save Template Layout</button>
                   </div>
-                  <div style={{ display: "flex", gap: "10px" }}>
+                  <div className="wizard-footer-group" style={{ display: "flex", gap: "10px" }}>
                     <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
                     <button
                       className="btn btn-primary"

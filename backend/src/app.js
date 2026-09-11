@@ -71,14 +71,16 @@ const { handleInvoiceExpressFallback } = require('./modules/invoice/routes/invoi
 const invoiceProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
-    timeout: 30000,
-    proxyTimeout: 30000,
+    timeout: 1000,
+    proxyTimeout: 1500,
     pathRewrite: {
         '^/api/v1/invoice': '/api'
     },
     onError: (err, req, res) => {
-        console.error(`[InvoiceProxy Error] target unreachable: ${err.message}`);
-        return handleInvoiceExpressFallback(req, res);
+        console.warn(`[InvoiceProxy Notice] Python service on port 8080 offline/unreachable (${err.code || err.message}). Switching to Express OCR Fallback Engine.`);
+        if (!res.headersSent) {
+            return handleInvoiceExpressFallback(req, res);
+        }
     }
 });
 
@@ -91,13 +93,13 @@ app.use((req, res, next) => {
         if (fullUrl.includes('/upload')) {
             return uploadParser(req, res, (err) => {
                 return invoiceProxy(req, res, (proxyErr) => {
-                    if (proxyErr) return handleInvoiceExpressFallback(req, res);
+                    if (!res.headersSent) return handleInvoiceExpressFallback(req, res);
                     next();
                 });
             });
         }
         return invoiceProxy(req, res, (err) => {
-            if (err) return handleInvoiceExpressFallback(req, res);
+            if (!res.headersSent) return handleInvoiceExpressFallback(req, res);
             next();
         });
     }
