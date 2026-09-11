@@ -286,7 +286,16 @@ const enrichBankDetails = (payload, base64Data = '', fileBuffer = null) => {
  * Formats raw AI extraction into standard invoice payload structure
  */
 const formatExtractionPayload = (raw) => {
-  const ext = raw?.extraction || raw;
+  let ext = raw?.extraction || raw?.output?.extraction || raw?.output || raw;
+  
+  if (typeof ext === 'string') {
+    try {
+      const cleanStr = ext.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      ext = JSON.parse(cleanStr);
+      if (ext.extraction) ext = ext.extraction;
+    } catch (e) {}
+  }
+
   return {
     invoice_details: {
       invoice_number: ext?.invoice_details?.invoice_number || ext?.invoice_number || `INV/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`,
@@ -311,7 +320,7 @@ const formatExtractionPayload = (raw) => {
       account_number: ext?.account_number || "",
       ifsc_code: ext?.ifsc_code || ""
     },
-    consignee_details: ext?.consignee_details || {},
+    consignee_details: ext?.consignee_details || ext?.shipped_to || {},
     transport_details: ext?.transport_details || {},
     tax_summary: {
       subtotal: parseFloat(ext?.tax_summary?.subtotal || ext?.subtotal || 0.0),
