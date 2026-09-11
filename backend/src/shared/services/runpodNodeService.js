@@ -101,7 +101,8 @@ const extractInvoiceData = async (fileBuffer, mimeType = 'application/pdf', file
   // Direct Call to RunPod Endpoint — Throws explicit error if RunPod fails
   const runpodResult = await callRunPodAPI(base64Data, filename, mimeType);
   const formatted = formatExtractionPayload(runpodResult);
-  return enrichBankDetails(formatted, base64Data, fileBuffer);
+  const enrichedBank = enrichBankDetails(formatted, base64Data, fileBuffer, runpodResult);
+  return reconcileTaxSummary(enrichedBank);
 };
 
 /**
@@ -124,8 +125,8 @@ const callRunPodAPI = (base64Data, filename, mimeType) => {
       input: {
         filename: filename,
         image_base64: base64Data,
-        system_prompt: "Extract invoice details, vendor details, consumer details, line items, bank details, and tax summary as valid JSON.",
-        user_prompt: "Extract invoice_details, vendor_details, consumer_details, bank_details, items, and tax_summary."
+        system_prompt: "You are an expert Indian GST Financial Document Parser. Extract exact values for invoice details, vendor details, consumer details, line items, bank details, cartage/freight charges, and tax summary without hallucination.",
+        user_prompt: "Carefully analyze this tax invoice. Extract: 1. invoice_details (invoice_number, invoice_date, due_date, po_number, irn, ack_no). 2. vendor_details (name, gstin, pan, address, phone). 3. consumer_details (name, gstin, pan, address). 4. bank_details (bank_name, account_number, ifsc_code, branch). 5. items (sl_no, description, hsn_sac, quantity, unit, rate, total_amount). 6. additional_charges (extract freight/cartage/delivery as array of {description, amount} or total number). 7. tax_summary (subtotal, taxable_amount, cgst, sgst, igst, round_off, grand_total)."
       }
     });
 
@@ -225,22 +226,23 @@ const pollRunPodStatus = (hostname, endpointId, jobId, apiKey) => {
 
 /**
  * Heuristic Rule-Based Bank Details Extractor
+ * Searches across payload JSON, raw RunPod AI output, and file buffer for bank details
  */
-const enrichBankDetails = (payload, base64Data = '', fileBuffer = null) => {
+const enrichBankDetails = (payload, base64Data = '', fileBuffer = null, rawRunPodResult = null) => {
   try {
     if (!payload) return payload;
     if (!payload.bank_details) payload.bank_details = {};
 
-    let textContent = '';
+    // Build searchable text corpus from all available sources
+    const textParts = [];
+    if (rawRunPodResult) textParts.push(JSON.stringify(rawRunPodResult));
+    textParts.push(JSON.stringify(payload));
     if (Buffer.isBuffer(fileBuffer)) {
-      textContent = fileBuffer.toString('utf8');
+      textParts.push(fileBuffer.toString('utf8'));
     } else if (base64Data) {
-      try {
-        textContent = Buffer.from(base64Data, 'base64').toString('utf8');
-      } catch (e) {
-        textContent = base64Data;
-      }
+      try { textParts.push(Buffer.from(base64Data, 'base64').toString('utf8')); } catch (e) { textParts.push(base64Data); }
     }
+    const textContent = textParts.join(' ');
 
     const bank = payload.bank_details;
 
@@ -268,7 +270,7 @@ const enrichBankDetails = (payload, base64Data = '', fileBuffer = null) => {
     }
 
     if (!bank.account_number || bank.account_number === 'null' || bank.account_number === '') {
-      const accMatch = textContent.match(/(?:A\/C|Account|Acct|Acc)(?:\s*No|\s*Number|\s*#)?[\s:-]*([0-9]{9,18})/i);
+      const accMatch = textContent.match(/(?:A\/C|Account|Acct|Acc|A\/c\s*No|A\/C\s*NO)(?:\s*No|\s*Number|\s*#)?[\s.:-]*([0-9]{9,18})/i);
       if (accMatch) {
         bank.account_number = accMatch[1].trim();
       }
@@ -327,6 +329,26 @@ const formatExtractionPayload = (raw) => {
     total_amount: parseNum(item.total_amount || item.amount || item.total || item.total_price)
   })) : [];
 
+  // Extract additional charges (Cartage, Freight, Handling, Packing, Delivery)
+  const rawCharges = ext?.additional_charges || ext?.extra_charges || ext?.other_charges || ext?.freight || ext?.cartage || [];
+  let additional_charges = [];
+  if (Array.isArray(rawCharges)) {
+    additional_charges = rawCharges.map(ch => {
+      if (typeof ch === 'number') return { description: "CARTAGE", amount: ch };
+      return {
+        description: String(ch.description || ch.name || ch.type || ch.charge_type || "Cartage / Freight").trim(),
+        amount: parseNum(ch.amount || ch.value || ch.price || ch.total || ch)
+      };
+    }).filter(ch => ch.amount > 0);
+  } else if (typeof rawCharges === 'number' && rawCharges > 0) {
+    additional_charges = [{ description: "CARTAGE", amount: rawCharges }];
+  } else if (typeof rawCharges === 'object' && rawCharges !== null) {
+    const amt = parseNum(rawCharges.amount || rawCharges.value);
+    if (amt > 0) {
+      additional_charges = [{ description: String(rawCharges.description || "Cartage / Freight").trim(), amount: amt }];
+    }
+  }
+
   return {
     invoice_details: {
       invoice_number: String(invDetails.invoice_number || ext?.invoice_number || ext?.invoice_no || ext?.inv_no || ext?.number || "").trim(),
@@ -373,11 +395,105 @@ const formatExtractionPayload = (raw) => {
       round_off: parseNum(taxSummary.round_off || ext?.round_off),
       grand_total: parseNum(taxSummary.grand_total || ext?.grand_total || ext?.total_amount || ext?.total)
     },
-    items: items
+    items: items,
+    additional_charges: additional_charges
   };
+};
+
+/**
+ * Mathematical Verification & Self-Correction Engine for Invoice Tax Summaries
+ * Eliminates hallucinated taxable_amount, CGST, SGST, IGST, and grand_total values
+ * by cross-checking against actual line item totals + additional charges.
+ */
+const reconcileTaxSummary = (payload) => {
+  try {
+    if (!payload || !payload.tax_summary) return payload;
+
+    const items = payload.items || [];
+    const itemsSum = items.reduce((sum, item) => sum + (parseNum(item.total_amount) || 0), 0);
+
+    const charges = payload.additional_charges || [];
+    const chargesSum = Array.isArray(charges)
+      ? charges.reduce((sum, ch) => sum + (parseNum(ch.amount) || 0), 0)
+      : parseNum(charges);
+
+    const calculatedTaxable = parseFloat((itemsSum + chargesSum).toFixed(2));
+    const ts = payload.tax_summary;
+
+    let taxable_amount = parseNum(ts.taxable_amount);
+    let subtotal = parseNum(ts.subtotal);
+    let cgst = parseNum(ts.cgst);
+    let sgst = parseNum(ts.sgst);
+    let igst = parseNum(ts.igst);
+    let cess = parseNum(ts.cess);
+    let round_off = parseNum(ts.round_off);
+    let grand_total = parseNum(ts.grand_total);
+
+    // Step 1: Reconcile taxable_amount if items sum is available and AI model value deviates by > 5%
+    if (itemsSum > 0 && calculatedTaxable > 0) {
+      const deviation = Math.abs(taxable_amount - calculatedTaxable);
+      if (taxable_amount === 0 || deviation > 0.05 * calculatedTaxable) {
+        console.warn(`[Tax Reconciler] Correcting AI taxable amount from ${taxable_amount} to calculated ${calculatedTaxable} (Items: ${itemsSum}, Charges: ${chargesSum})`);
+        taxable_amount = calculatedTaxable;
+        if (subtotal === 0 || Math.abs(subtotal - itemsSum) > 0.05 * itemsSum) {
+          subtotal = parseFloat(itemsSum.toFixed(2));
+        }
+      }
+    }
+
+    // Step 2: Reconcile CGST & SGST if taxes are proportionally wrong vs corrected taxable_amount
+    if (taxable_amount > 0) {
+      const currentTaxTotal = cgst + sgst + igst;
+      if (currentTaxTotal > 0 && currentTaxTotal / taxable_amount > 0.30) {
+        // Taxes exceed 30% of taxable amount — likely hallucinated against wrong base
+        if (cgst > 0 && sgst > 0 && Math.abs(cgst - sgst) < 1.0) {
+          // Equal CGST & SGST — intra-state. Detect rate from ratio.
+          const originalTaxable = parseNum(ts.taxable_amount);
+          let gstRate = 0.18; // default 18%
+          if (originalTaxable > 0 && cgst > 0) {
+            const detectedHalfRate = cgst / originalTaxable;
+            if (detectedHalfRate > 0.055 && detectedHalfRate < 0.065) gstRate = 0.12;
+            else if (detectedHalfRate > 0.02 && detectedHalfRate < 0.03) gstRate = 0.05;
+            else if (detectedHalfRate > 0.12 && detectedHalfRate < 0.15) gstRate = 0.28;
+            else if (detectedHalfRate > 0.085 && detectedHalfRate < 0.095) gstRate = 0.18;
+          }
+          cgst = parseFloat(((taxable_amount * gstRate) / 2).toFixed(2));
+          sgst = parseFloat(((taxable_amount * gstRate) / 2).toFixed(2));
+          console.warn(`[Tax Reconciler] Reconciled CGST=${cgst}, SGST=${sgst} @ ${gstRate * 100}% on taxable ${taxable_amount}`);
+        }
+      }
+    }
+
+    const total_tax = parseFloat((cgst + sgst + igst + cess).toFixed(2));
+
+    // Step 3: Reconcile Grand Total
+    const expectedGrand = parseFloat((taxable_amount + total_tax + round_off).toFixed(2));
+    if (grand_total === 0 || Math.abs(grand_total - expectedGrand) > 1.0) {
+      console.warn(`[Tax Reconciler] Correcting AI grand total from ${grand_total} to reconciled ${expectedGrand}`);
+      grand_total = expectedGrand;
+    }
+
+    payload.tax_summary = {
+      subtotal: subtotal || taxable_amount,
+      taxable_amount,
+      cgst,
+      sgst,
+      igst,
+      cess: cess || 0,
+      round_off,
+      total_tax,
+      grand_total
+    };
+
+    return payload;
+  } catch (err) {
+    console.error("[Tax Reconciler Error]", err.message);
+    return payload;
+  }
 };
 
 module.exports = {
   extractInvoiceData,
-  enrichBankDetails
+  enrichBankDetails,
+  reconcileTaxSummary
 };

@@ -123,8 +123,13 @@ const handleInvoiceExpressFallback = async (req, res) => {
       return res.redirect(foundDoc.file_url);
     }
 
+    // No file URL and no SVG renderer — return a simple placeholder
     res.setHeader('Content-Type', 'image/svg+xml');
-    return res.status(200).send(renderSampleInvoiceSVG(foundDoc));
+    const placeholderSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width="400" height="200" style="background:#f8fafc;font-family:sans-serif">
+      <text x="200" y="90" text-anchor="middle" font-size="16" fill="#64748b">No preview available</text>
+      <text x="200" y="120" text-anchor="middle" font-size="12" fill="#94a3b8">Upload a document to view its preview</text>
+    </svg>`;
+    return res.status(200).send(placeholderSVG);
   }
 
   if (fullUrl.includes('/templates')) {
