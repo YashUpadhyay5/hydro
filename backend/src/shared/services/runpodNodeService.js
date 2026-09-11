@@ -282,8 +282,17 @@ const enrichBankDetails = (payload, base64Data = '', fileBuffer = null) => {
   }
 };
 
+const parseNum = (val) => {
+  if (val === undefined || val === null || val === '') return 0.0;
+  if (typeof val === 'number') return isNaN(val) ? 0.0 : val;
+  const cleaned = String(val).replace(/[^0-9.-]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0.0 : parsed;
+};
+
 /**
  * Formats raw AI extraction into standard invoice payload structure
+ * Completely dynamic mapping with flexible key aliases & zero hardcoded default strings
  */
 const formatExtractionPayload = (raw) => {
   let ext = raw?.extraction || raw?.output?.extraction || raw?.output || raw;
@@ -293,46 +302,78 @@ const formatExtractionPayload = (raw) => {
       const cleanStr = ext.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
       ext = JSON.parse(cleanStr);
       if (ext.extraction) ext = ext.extraction;
+      if (ext.output && typeof ext.output === 'object') ext = ext.output;
     } catch (e) {}
   }
 
+  // Extract nested or flat objects with deep key aliases
+  const invDetails = ext?.invoice_details || ext?.invoice || {};
+  const vendorDetails = ext?.vendor_details || ext?.vendor || ext?.seller || ext?.supplier || {};
+  const consumerDetails = ext?.consumer_details || ext?.consumer || ext?.buyer || ext?.customer || ext?.billed_to || {};
+  const taxSummary = ext?.tax_summary || ext?.taxes || ext?.summary || {};
+  const bankDetails = ext?.bank_details || ext?.bank || {};
+  const transportDetails = ext?.transport_details || ext?.transport || {};
+  const consigneeDetails = ext?.consignee_details || ext?.consignee || ext?.shipped_to || {};
+
+  // Flexibly extract item arrays
+  const rawItems = ext?.items || ext?.item_details || ext?.line_items || ext?.products || ext?.goods || [];
+  const items = Array.isArray(rawItems) ? rawItems.map((item, idx) => ({
+    sl_no: item.sl_no || item.sn || item.s_no || idx + 1,
+    description: String(item.description || item.name || item.item_name || item.particulars || item.goods || `Item ${idx + 1}`).trim(),
+    hsn_sac: String(item.hsn_sac || item.hsn || item.sac || item.hsn_code || "").trim(),
+    quantity: parseNum(item.quantity || item.qty || item.count || 1),
+    unit: String(item.unit || item.uom || item.unit_of_measure || "").trim(),
+    rate: parseNum(item.rate || item.price || item.unit_price || item.unit_rate),
+    total_amount: parseNum(item.total_amount || item.amount || item.total || item.total_price)
+  })) : [];
+
   return {
     invoice_details: {
-      invoice_number: ext?.invoice_details?.invoice_number || ext?.invoice_number || `INV/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`,
-      invoice_date: ext?.invoice_details?.invoice_date || ext?.invoice_date || new Date().toISOString().split('T')[0],
-      due_date: ext?.invoice_details?.due_date || ext?.due_date || "",
-      po_number: ext?.invoice_details?.po_number || ext?.po_number || ""
+      invoice_number: String(invDetails.invoice_number || ext?.invoice_number || ext?.invoice_no || ext?.inv_no || ext?.number || "").trim(),
+      invoice_date: String(invDetails.invoice_date || ext?.invoice_date || ext?.date || ext?.inv_date || "").trim(),
+      due_date: String(invDetails.due_date || ext?.due_date || "").trim(),
+      po_number: String(invDetails.po_number || ext?.po_number || ext?.po_no || "").trim(),
+      irn: String(invDetails.irn || ext?.irn || "").trim(),
+      ack_no: String(invDetails.ack_no || ext?.ack_no || "").trim()
     },
     vendor_details: {
-      name: ext?.vendor_details?.name || ext?.vendor_name || "Extracted Vendor",
-      gstin: ext?.vendor_details?.gstin || ext?.vendor_gstin || "",
-      pan: ext?.vendor_details?.pan || "",
-      address: ext?.vendor_details?.address || "",
-      phone: ext?.vendor_details?.phone || ""
+      name: String(vendorDetails.name || ext?.vendor_name || ext?.seller_name || ext?.supplier_name || "").trim(),
+      gstin: String(vendorDetails.gstin || ext?.vendor_gstin || ext?.seller_gstin || "").trim(),
+      pan: String(vendorDetails.pan || ext?.vendor_pan || "").trim(),
+      address: String(vendorDetails.address || ext?.vendor_address || ext?.seller_address || "").trim(),
+      phone: String(vendorDetails.phone || ext?.vendor_phone || ext?.phone || "").trim()
     },
     consumer_details: {
-      name: ext?.consumer_details?.name || ext?.buyer_name || "Hydromaterials Private Limited",
-      gstin: ext?.consumer_details?.gstin || ext?.buyer_gstin || "",
-      address: ext?.consumer_details?.address || ""
+      name: String(consumerDetails.name || ext?.buyer_name || ext?.customer_name || "").trim(),
+      gstin: String(consumerDetails.gstin || ext?.buyer_gstin || ext?.customer_gstin || "").trim(),
+      pan: String(consumerDetails.pan || ext?.buyer_pan || "").trim(),
+      address: String(consumerDetails.address || ext?.buyer_address || ext?.customer_address || "").trim()
     },
-    bank_details: ext?.bank_details || {
-      bank_name: ext?.bank_name || "",
-      account_number: ext?.account_number || "",
-      ifsc_code: ext?.ifsc_code || ""
+    bank_details: {
+      bank_name: String(bankDetails.bank_name || ext?.bank_name || "").trim(),
+      account_number: String(bankDetails.account_number || ext?.account_number || ext?.acc_no || "").trim(),
+      ifsc_code: String(bankDetails.ifsc_code || ext?.ifsc_code || ext?.ifsc || "").trim(),
+      branch: String(bankDetails.branch || ext?.branch || "").trim()
     },
-    consignee_details: ext?.consignee_details || ext?.shipped_to || {},
-    transport_details: ext?.transport_details || {},
+    consignee_details: consigneeDetails,
+    transport_details: {
+      destination: String(transportDetails.destination || ext?.destination || "").trim(),
+      gr_no: String(transportDetails.gr_no || ext?.gr_no || ext?.rr_no || "").trim(),
+      vehicle_number: String(transportDetails.vehicle_number || ext?.vehicle_number || ext?.vehicle_no || "").trim(),
+      weight: String(transportDetails.weight || ext?.weight || "").trim(),
+      mode_of_transport: String(transportDetails.mode_of_transport || ext?.transport || "").trim()
+    },
     tax_summary: {
-      subtotal: parseFloat(ext?.tax_summary?.subtotal || ext?.subtotal || 0.0),
-      taxable_amount: parseFloat(ext?.tax_summary?.taxable_amount || ext?.taxable_amount || 0.0),
-      cgst: parseFloat(ext?.tax_summary?.cgst || ext?.cgst || 0.0),
-      sgst: parseFloat(ext?.tax_summary?.sgst || ext?.sgst || 0.0),
-      igst: parseFloat(ext?.tax_summary?.igst || ext?.igst || 0.0),
-      total_tax: parseFloat(ext?.tax_summary?.total_tax || ext?.total_tax || 0.0),
-      round_off: parseFloat(ext?.tax_summary?.round_off || ext?.round_off || 0.0),
-      grand_total: parseFloat(ext?.tax_summary?.grand_total || ext?.grand_total || 0.0)
+      subtotal: parseNum(taxSummary.subtotal || ext?.subtotal),
+      taxable_amount: parseNum(taxSummary.taxable_amount || ext?.taxable_amount || taxSummary.subtotal || ext?.subtotal),
+      cgst: parseNum(taxSummary.cgst || ext?.cgst),
+      sgst: parseNum(taxSummary.sgst || ext?.sgst),
+      igst: parseNum(taxSummary.igst || ext?.igst),
+      total_tax: parseNum(taxSummary.total_tax || ext?.total_tax),
+      round_off: parseNum(taxSummary.round_off || ext?.round_off),
+      grand_total: parseNum(taxSummary.grand_total || ext?.grand_total || ext?.total_amount || ext?.total)
     },
-    items: ext?.items || ext?.item_details || []
+    items: items
   };
 };
 
